@@ -112,7 +112,12 @@ export default function StoryView({ story, onGenerate, onNewTopic, isHomepage }:
       <section className="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 space-y-8">
         <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Page 2 — Learning Section</div>
 
-        <VocabularyTable vocabulary={story.vocabulary} showMeanings={showMeanings} />
+        <VocabularyTable
+          vocabulary={story.vocabulary}
+          showMeanings={showMeanings}
+          storySlug={story.slug}
+          storyTitle={story.title}
+        />
 
         <div className="border-t border-gray-100 pt-8">
           <SentencePatterns patterns={story.sentencePatterns} showMeanings={showMeanings} />

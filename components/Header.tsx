@@ -14,6 +14,9 @@ export default function Header() {
           <Link href="/stories" className="hover:text-gray-900 transition-colors">
             Archive
           </Link>
+          <Link href="/vocab" className="hover:text-gray-900 transition-colors">
+            Vocab
+          </Link>
         </nav>
       </div>
     </header>

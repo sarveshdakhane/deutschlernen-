@@ -4,6 +4,15 @@ export type VocabularyItem = {
   example: string;
 };
 
+export type SavedVocabItem = {
+  word: string;
+  meaning: string;
+  example: string;
+  storySlug: string;
+  storyTitle: string;
+  savedAt: string;
+};
+
 export type SentencePattern = {
   pattern: string;
   meaning: string;
