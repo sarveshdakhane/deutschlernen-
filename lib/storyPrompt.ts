@@ -5,12 +5,8 @@ export function buildStoryPrompt(topic?: string): string {
 
   return `You are a German B1 exam teacher.
 
-Correct all mistakes.
-Focus on helping learners pass the German B1 exam.
-Always expect full sentences in answers.
-
 TASK:
-Create a German B1-level learning text for reading and writing practice.
+Create a German B1-level reading text with a multiple choice quiz.
 
 The output must be valid JSON only. Do not include markdown. Do not include explanations outside JSON.
 
@@ -18,35 +14,24 @@ ${topicInstruction}
 
 Requirements:
 
-PAGE 1 — Story:
-- Create a German B1-level story.
-- Length: 350–450 words.
-- Style: clear B1 exam style.
+STORY:
+- German B1-level story, 350–450 words.
+- Clear B1 exam style. Mix short and medium sentences.
 - Use mostly A2–B1 vocabulary with a few useful new words.
-- Mix short and medium sentences.
-- The story must include:
-  - Präsens
-  - Perfekt
-  - Modalverben
-  - Nebensätze
-  - At least 2 Relativsätze
-  - Konjunktiv II
-  - Passive voice
+- Include: Präsens, Perfekt, Modalverben, Nebensätze, Relativsätze, Konjunktiv II, Passiv.
 
-PAGE 2 — Learning Section:
-1. Vocabulary Table:
+VOCABULARY:
 - 10–15 useful words from the story.
 - Include German word, English meaning, and German example sentence.
 
-2. Useful Sentence Patterns:
-- 6–10 sentence patterns from the story.
-- These should help learners write B1 exam emails or essays.
-- Include German pattern, English meaning, and German example sentence.
+SENTENCE PATTERNS:
+- 6–10 sentence patterns from the story useful for B1 writing.
 
-3. Quiz:
-- 5 reading comprehension questions.
-- 3 writing practice prompts.
-- Add instruction: Answer in full sentences.
+QUIZ — Multiple Choice:
+- Exactly 5 questions testing reading comprehension of the story.
+- Each question has exactly 4 answer options.
+- Exactly one option is correct. The others are plausible but clearly wrong based on the story.
+- "answer" is the 0-based index of the correct option (0 = first, 1 = second, 2 = third, 3 = fourth).
 
 Return this exact JSON structure:
 
@@ -66,27 +51,21 @@ Return this exact JSON structure:
     "passiv": true
   },
   "vocabulary": [
-    {
-      "word": "",
-      "meaning": "",
-      "example": ""
-    }
+    { "word": "", "meaning": "", "example": "" }
   ],
   "sentencePatterns": [
-    {
-      "pattern": "",
-      "meaning": "",
-      "example": ""
-    }
+    { "pattern": "", "meaning": "", "example": "" }
   ],
   "quiz": {
-    "readingQuestions": [],
-    "writingPrompts": []
+    "questions": [
+      {
+        "question": "",
+        "options": ["", "", "", ""],
+        "answer": 0
+      }
+    ]
   }
 }
 
-Important:
-Return JSON only.
-Do not include markdown.
-Do not include explanations outside JSON.`;
+Return JSON only. No markdown. No explanations outside JSON.`;
 }

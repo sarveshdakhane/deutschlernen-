@@ -2,47 +2,34 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Story } from "@/lib/types";
+import { getTodayStory, saveStory } from "@/lib/storyStorage";
 import StoryView from "@/components/StoryView";
 import LoadingState from "@/components/LoadingState";
 import ErrorState from "@/components/ErrorState";
-
-const TOPICS = [
-  "moving to a new city",
-  "finding an apartment",
-  "first day at work",
-  "visiting the doctor",
-  "planning a holiday",
-  "writing to a language school",
-  "solving a problem with a neighbour",
-  "public transport problem",
-  "healthy lifestyle",
-  "learning German for work",
-];
-
-function getRandomTopic(exclude?: string): string {
-  const filtered = TOPICS.filter((t) => t !== exclude);
-  return filtered[Math.floor(Math.random() * filtered.length)];
-}
 
 export default function HomePage() {
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentTopic, setCurrentTopic] = useState<string | undefined>();
 
-  const fetchStory = useCallback(async (topic?: string) => {
+  const loadStory = useCallback(async () => {
     setLoading(true);
     setError(null);
+
+    const cached = getTodayStory();
+    if (cached) {
+      setStory(cached);
+      setLoading(false);
+      return;
+    }
+
     try {
-      const url = topic
-        ? `/api/generate-story?topic=${encodeURIComponent(topic)}`
-        : "/api/generate-story";
-      const res = await fetch(url);
+      const res = await fetch("/api/generate-story");
       if (!res.ok) throw new Error("Server error");
-      const data = await res.json();
+      const data = await res.json() as Story & { error?: string };
       if (data.error) throw new Error(data.error);
+      saveStory(data);
       setStory(data);
-      setCurrentTopic(topic);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -51,11 +38,8 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    fetchStory();
-  }, [fetchStory]);
-
-  const handleGenerate = () => fetchStory();
-  const handleNewTopic = () => fetchStory(getRandomTopic(currentTopic));
+    loadStory();
+  }, [loadStory]);
 
   return (
     <main>
@@ -65,15 +49,10 @@ export default function HomePage() {
         </div>
       ) : error ? (
         <div className="max-w-3xl mx-auto px-4 py-8">
-          <ErrorState message={error} onRetry={() => fetchStory()} />
+          <ErrorState message={error} onRetry={loadStory} />
         </div>
       ) : story ? (
-        <StoryView
-          story={story}
-          onGenerate={handleGenerate}
-          onNewTopic={handleNewTopic}
-          isHomepage
-        />
+        <StoryView story={story} />
       ) : null}
     </main>
   );

@@ -15,6 +15,14 @@ export function isVocabSaved(word: string, storySlug: string): boolean {
   return getSavedVocab().some((v) => v.word === word && v.storySlug === storySlug);
 }
 
+export function addToVocab(item: SavedVocabItem): void {
+  const current = getSavedVocab().filter(
+    (v) => !(v.word === item.word && v.storySlug === item.storySlug)
+  );
+  current.push(item);
+  localStorage.setItem(KEY, JSON.stringify(current));
+}
+
 export function toggleSavedVocab(item: SavedVocabItem): boolean {
   const current = getSavedVocab();
   const idx = current.findIndex((v) => v.word === item.word && v.storySlug === item.storySlug);

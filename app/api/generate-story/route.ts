@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const story = await generateStory(topic);
+    story.date = new Date().toISOString().split("T")[0];
     return NextResponse.json(story);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to generate story";

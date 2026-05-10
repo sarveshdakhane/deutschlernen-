@@ -49,11 +49,8 @@ function validateStory(data: unknown): Story {
     vocabulary: Array.isArray(d.vocabulary) ? d.vocabulary : [],
     sentencePatterns: Array.isArray(d.sentencePatterns) ? d.sentencePatterns : [],
     quiz: {
-      readingQuestions: Array.isArray((d.quiz as Record<string, unknown>)?.readingQuestions)
-        ? ((d.quiz as Record<string, unknown>).readingQuestions as string[])
-        : [],
-      writingPrompts: Array.isArray((d.quiz as Record<string, unknown>)?.writingPrompts)
-        ? ((d.quiz as Record<string, unknown>).writingPrompts as string[])
+      questions: Array.isArray((d.quiz as Record<string, unknown>)?.questions)
+        ? ((d.quiz as Record<string, unknown>).questions as { question: string; options: string[]; answer: number }[])
         : [],
     },
   };
@@ -84,11 +81,7 @@ export async function generateStory(topic?: string): Promise<Story> {
 
     const parsed = JSON.parse(jsonMatch[0]);
     return validateStory(parsed);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("quota") || message.includes("rate") || message.includes("limit")) {
-      return getSampleStory();
-    }
-    throw error;
+  } catch {
+    return getSampleStory();
   }
 }

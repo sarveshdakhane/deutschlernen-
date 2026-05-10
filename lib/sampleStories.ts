@@ -84,17 +84,57 @@ Manchmal vermisste sie ihre alte Stadt und ihre Freunde. Sie schrieb ihnen lange
       },
     ],
     quiz: {
-      readingQuestions: [
-        "Warum ist Lena nach München gezogen?",
-        "Wie war die neue Wohnung von Lena?",
-        "Was hat Lena in der ersten Woche bei der Arbeit gemacht?",
-        "Was hat Lena am Wochenende in der Stadt unternommen?",
-        "Wie fühlte sich Lena am Ende der Geschichte?",
-      ],
-      writingPrompts: [
-        "Schreiben Sie eine kurze E-Mail an einen Freund und erklären Sie, warum Sie in eine neue Stadt gezogen sind. (Answer in full sentences.)",
-        "Beschreiben Sie, wie Sie sich an einem ersten Arbeitstag fühlen würden und was Sie tun würden. (Answer in full sentences.)",
-        "Was würden Sie tun, wenn Sie in eine neue Stadt ziehen müssten? Nennen Sie drei Dinge, die Sie organisieren würden. (Answer in full sentences.)",
+      questions: [
+        {
+          question: "Warum ist Lena nach München gezogen?",
+          options: [
+            "Sie wollte ihre Familie besuchen.",
+            "Sie hatte eine gut bezahlte Stelle bekommen.",
+            "Ihre beste Freundin Sara wohnte dort.",
+            "Sie wollte das Deutsche Museum besuchen.",
+          ],
+          answer: 1,
+        },
+        {
+          question: "Wie war Lenas neue Wohnung?",
+          options: [
+            "Groß und modern, aber sehr teuer.",
+            "Laut und nicht sehr komfortabel.",
+            "Klein, aber hell und in einem ruhigen Viertel.",
+            "Dunkel und weit von der Arbeit entfernt.",
+          ],
+          answer: 2,
+        },
+        {
+          question: "Was bot Lenas Kollegin Sara ihr an?",
+          options: [
+            "Ihr bei der Wohnungssuche zu helfen.",
+            "Gemeinsam zum Marienplatz zu fahren.",
+            "Ihr die Stadt zu zeigen.",
+            "Ihr Büro mit ihr zu teilen.",
+          ],
+          answer: 2,
+        },
+        {
+          question: "Was hat Lena am Wochenende gemacht?",
+          options: [
+            "Sie hat ihre Eltern in der alten Stadt besucht.",
+            "Sie ist mit Sara ins Restaurant gegangen.",
+            "Sie hat das Deutsche Museum besucht und auf dem Markt eingekauft.",
+            "Sie hat sich auf das Firmenfest vorbereitet.",
+          ],
+          answer: 2,
+        },
+        {
+          question: "Wie blieb Lena mit ihren alten Freunden in Kontakt?",
+          options: [
+            "Sie ist jedes Wochenende in ihre alte Stadt gefahren.",
+            "Sie hat ihnen lange Nachrichten geschrieben und sie regelmäßig angerufen.",
+            "Sie hat ihnen Briefe per Post geschickt.",
+            "Sie hat gar keinen Kontakt gehalten.",
+          ],
+          answer: 1,
+        },
       ],
     },
   },
@@ -171,17 +211,57 @@ Zu Hause legte er sich sofort hin. Seine Frau brachte ihm heiße Suppe und Kräu
       },
     ],
     quiz: {
-      readingQuestions: [
-        "Welche Symptome hatte Markus?",
-        "Wer hat darauf bestanden, dass Markus zum Arzt geht?",
-        "Was hat der Arzt diagnostiziert?",
-        "Welche Anweisungen hat der Arzt Markus gegeben?",
-        "Wie hat sich Markus nach zwei Tagen gefühlt?",
-      ],
-      writingPrompts: [
-        "Schreiben Sie eine kurze Nachricht an Ihren Chef und erklären Sie, warum Sie krank sind und nicht arbeiten können. (Answer in full sentences.)",
-        "Beschreiben Sie einen Arztbesuch, den Sie selbst erlebt haben oder den Sie sich vorstellen können. (Answer in full sentences.)",
-        "Was würden Sie tun, wenn Sie krank wären und keinen Arzt in der Nähe hätten? (Answer in full sentences.)",
+      questions: [
+        {
+          question: "Warum ist Markus zum Arzt gegangen?",
+          options: [
+            "Er hatte seit einer Woche Bauchschmerzen.",
+            "Er hatte seit drei Tagen Halsschmerzen und Fieber.",
+            "Er brauchte eine Krankmeldung für die Arbeit.",
+            "Er wollte Antibiotika kaufen.",
+          ],
+          answer: 1,
+        },
+        {
+          question: "Wer hat darauf bestanden, dass Markus zum Arzt geht?",
+          options: [
+            "Sein Chef",
+            "Die Arzthelferin",
+            "Seine Frau",
+            "Ein Freund",
+          ],
+          answer: 2,
+        },
+        {
+          question: "Was hat Dr. Fischer bei Markus diagnostiziert?",
+          options: [
+            "Eine Grippe",
+            "Einen starken Schnupfen",
+            "Eine Mandelentzündung",
+            "Einen Virus",
+          ],
+          answer: 2,
+        },
+        {
+          question: "Was hat der Arzt Markus empfohlen?",
+          options: [
+            "Jeden Tag zur Kontrolle zu kommen.",
+            "Mindestens eine Woche zu Hause zu bleiben.",
+            "Viel Sport zu treiben und frische Luft zu schnappen.",
+            "Viel zu trinken, sich auszuruhen und mindestens drei Tage zu Hause zu bleiben.",
+          ],
+          answer: 3,
+        },
+        {
+          question: "Wie hat sich Markus nach zwei Tagen gefühlt?",
+          options: [
+            "Noch genauso schlecht wie zuvor.",
+            "Schon viel besser.",
+            "Er musste wieder zum Arzt gehen.",
+            "Er hatte neue Symptome bekommen.",
+          ],
+          answer: 1,
+        },
       ],
     },
   },

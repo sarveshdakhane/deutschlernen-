@@ -19,6 +19,12 @@ export type SentencePattern = {
   example: string;
 };
 
+export type QuizQuestion = {
+  question: string;
+  options: string[];
+  answer: number;
+};
+
 export type Story = {
   slug: string;
   title: string;
@@ -38,7 +44,6 @@ export type Story = {
   vocabulary: VocabularyItem[];
   sentencePatterns: SentencePattern[];
   quiz: {
-    readingQuestions: string[];
-    writingPrompts: string[];
+    questions: QuizQuestion[];
   };
 };

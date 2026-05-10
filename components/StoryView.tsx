@@ -1,72 +1,77 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Story } from "@/lib/types";
-import VocabularyTable from "./VocabularyTable";
-import SentencePatterns from "./SentencePatterns";
+import WordPopup from "./WordPopup";
 import QuizSection from "./QuizSection";
 
-const GRAMMAR_LABELS: Record<string, string> = {
-  praesens: "Präsens",
-  perfekt: "Perfekt",
-  modalverben: "Modalverben",
-  nebensaetze: "Nebensätze",
-  relativsaetze: "Relativsätze",
-  konjunktivII: "Konjunktiv II",
-  passiv: "Passiv",
+type PopupState = {
+  word: string;
+  sentence: string;
+  x: number;
+  y: number;
 };
+
+function cleanWord(token: string): string {
+  return token.replace(/^[^a-zA-ZäöüÄÖÜß]+|[^a-zA-ZäöüÄÖÜß]+$/g, "");
+}
+
+function extractSentence(paragraph: string, word: string): string {
+  const sentences = paragraph.split(/(?<=[.!?])\s+/);
+  return sentences.find((s) => s.includes(word)) ?? paragraph.slice(0, 150);
+}
+
+type ParagraphProps = {
+  text: string;
+  onWordClick: (word: string, sentence: string, x: number, y: number) => void;
+};
+
+function ClickableParagraph({ text, onWordClick }: ParagraphProps) {
+  const tokens = text.split(/(\s+)/);
+  return (
+    <p className="text-[17px] sm:text-[18px] leading-[1.85] sm:leading-[1.9] text-gray-800 text-justify hyphens-auto" lang="de">
+      {tokens.map((token, i) => {
+        if (/^\s+$/.test(token)) return token;
+        const word = cleanWord(token);
+        if (!word) return token;
+        return (
+          <span
+            key={i}
+            onClick={(e) => {
+              const rect = (e.target as HTMLElement).getBoundingClientRect();
+              onWordClick(word, extractSentence(text, word), rect.left + rect.width / 2, rect.bottom);
+            }}
+            className="cursor-pointer rounded px-0.5 -mx-0.5 active:bg-yellow-100 hover:bg-yellow-100 transition-colors"
+          >
+            {token}
+          </span>
+        );
+      })}
+    </p>
+  );
+}
 
 type Props = {
   story: Story;
-  onGenerate?: () => void;
-  onNewTopic?: () => void;
-  isHomepage?: boolean;
 };
 
-export default function StoryView({ story, onGenerate, onNewTopic, isHomepage }: Props) {
-  const [showMeanings, setShowMeanings] = useState(true);
+export default function StoryView({ story }: Props) {
+  const [popup, setPopup] = useState<PopupState | null>(null);
+
+  const handleWordClick = useCallback((word: string, sentence: string, x: number, y: number) => {
+    setPopup({ word, sentence, x, y });
+  }, []);
+
+  const closePopup = useCallback(() => setPopup(null), []);
 
   const paragraphs = story.story.split(/\n+/).filter(Boolean);
 
   return (
-    <article className="max-w-3xl mx-auto px-4 py-8">
-      {/* Action buttons */}
-      {isHomepage && (
-        <div className="flex flex-wrap gap-2 mb-8 print:hidden">
-          {onGenerate && (
-            <button
-              onClick={onGenerate}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Generate Today&apos;s Story
-            </button>
-          )}
-          {onNewTopic && (
-            <button
-              onClick={onNewTopic}
-              className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              New Practice Topic
-            </button>
-          )}
-          <button
-            onClick={() => setShowMeanings((v) => !v)}
-            className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            {showMeanings ? "Hide" : "Show"} English Meanings
-          </button>
-          <button
-            onClick={() => window.print()}
-            className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            Print
-          </button>
-        </div>
-      )}
+    <article className="max-w-5xl mx-auto px-3 sm:px-6 py-6 sm:py-10">
 
       {/* Story header */}
-      <div className="mb-6">
-        <div className="flex flex-wrap items-center gap-2 mb-3">
+      <div className="mb-6 sm:mb-8">
+        <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-3">
           <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full">
             {story.difficulty}
           </span>
@@ -74,79 +79,44 @@ export default function StoryView({ story, onGenerate, onNewTopic, isHomepage }:
           <span className="text-xs text-gray-400">·</span>
           <span className="text-xs text-gray-500">{story.topic}</span>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight">{story.title}</h1>
+        <h1 className="text-xl sm:text-3xl font-bold text-gray-900 leading-snug">{story.title}</h1>
+        <p className="text-xs text-gray-400 mt-2">Tap any word to save it to your vocab list.</p>
       </div>
 
-      {/* PAGE 1 — Story */}
-      <section className="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 mb-6">
-        <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-5">Page 1 — Story</div>
-        <div className="space-y-4">
-          {paragraphs.map((para, i) => (
-            <p key={i} className="text-base text-gray-800 leading-relaxed">
-              {para}
-            </p>
-          ))}
-        </div>
-
-        {/* Grammar checklist */}
-        <div className="mt-8 pt-6 border-t border-gray-100">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">B1 Grammar included</p>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(story.grammarChecklist).map(([key, value]) => (
-              <span
-                key={key}
-                className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                  value
-                    ? "bg-green-50 text-green-700"
-                    : "bg-gray-100 text-gray-400 line-through"
-                }`}
-              >
-                {GRAMMAR_LABELS[key] ?? key}
-              </span>
-            ))}
-          </div>
-        </div>
+      {/* Story text */}
+      <section className="bg-white border border-gray-200 rounded-2xl px-5 py-7 sm:px-14 sm:py-12 mb-4 sm:mb-6 space-y-5 sm:space-y-6">
+        {paragraphs.map((para, i) => (
+          <ClickableParagraph key={i} text={para} onWordClick={handleWordClick} />
+        ))}
       </section>
 
-      {/* PAGE 2 — Learning section */}
-      <section className="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 space-y-8">
-        <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Page 2 — Learning Section</div>
+      {/* Quiz */}
+      {(story.quiz.questions?.length ?? 0) > 0 && (
+        <section className="bg-white border border-gray-200 rounded-2xl px-5 py-7 sm:px-14 sm:py-12 print:hidden">
+          <QuizSection questions={story.quiz.questions} />
+        </section>
+      )}
 
-        <VocabularyTable
-          vocabulary={story.vocabulary}
-          showMeanings={showMeanings}
+      {/* Print button */}
+      <div className="mt-5 sm:mt-6 print:hidden">
+        <button
+          onClick={() => window.print()}
+          className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+        >
+          Print
+        </button>
+      </div>
+
+      {popup && (
+        <WordPopup
+          word={popup.word}
+          sentence={popup.sentence}
           storySlug={story.slug}
           storyTitle={story.title}
+          storyVocabulary={story.vocabulary}
+          position={{ x: popup.x, y: popup.y }}
+          onClose={closePopup}
         />
-
-        <div className="border-t border-gray-100 pt-8">
-          <SentencePatterns patterns={story.sentencePatterns} showMeanings={showMeanings} />
-        </div>
-
-        <div className="border-t border-gray-100 pt-8">
-          <QuizSection
-            readingQuestions={story.quiz.readingQuestions}
-            writingPrompts={story.quiz.writingPrompts}
-          />
-        </div>
-      </section>
-
-      {/* Non-homepage toggle */}
-      {!isHomepage && (
-        <div className="mt-6 flex gap-3 print:hidden">
-          <button
-            onClick={() => setShowMeanings((v) => !v)}
-            className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            {showMeanings ? "Hide" : "Show"} English Meanings
-          </button>
-          <button
-            onClick={() => window.print()}
-            className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            Print
-          </button>
-        </div>
       )}
     </article>
   );
