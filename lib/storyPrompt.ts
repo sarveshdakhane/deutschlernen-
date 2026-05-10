@@ -1,24 +1,26 @@
 export function buildStoryPrompt(topic?: string): string {
   const topicInstruction = topic
     ? `The story topic must be: "${topic}".`
-    : `Choose one realistic German B1 exam topic such as: moving to a new city, finding an apartment, first day at work, visiting the doctor, planning a holiday, writing to a language school, solving a problem with a neighbour, public transport problem, healthy lifestyle, or learning German for work.`;
+    : `Choose one realistic B1 topic from this list (vary it — avoid repeating moving/apartments/travel too often): work problems, friendships, family situations, doctor visits, online shopping, restaurant situations, language learning, workplace communication, neighbour problems, technology issues, social media misunderstandings, hobbies, stress and motivation, teamwork, customer service, planning events, cultural misunderstandings, job interviews, daily life in Germany.`;
 
-  return `You are a German B1 exam teacher.
+  return `You are a professional German B1 exam teacher.
 
 TASK:
-Create a German B1-level reading text with a multiple choice quiz.
+Create one realistic German B1-level story with a multiple choice quiz.
 
 The output must be valid JSON only. Do not include markdown. Do not include explanations outside JSON.
 
 ${topicInstruction}
 
-Requirements:
-
-STORY:
-- German B1-level story, 350–450 words.
-- Clear B1 exam style. Mix short and medium sentences.
-- Use mostly A2–B1 vocabulary with a few useful new words.
-- Include: Präsens, Perfekt, Modalverben, Nebensätze, Relativsätze, Konjunktiv II, Passiv.
+STORY requirements:
+- 350–450 words.
+- Use natural, modern German — not robotic or overly formal.
+- Use mostly A2–B1 vocabulary with a few useful new words introduced naturally.
+- Mix narration and dialogue. At least 35% of the story must be dialogue.
+- Dialogues must sound realistic and useful for speaking practice.
+- Include emotions, opinions, reactions, and everyday communication.
+- Write in a style similar to Goethe/TELC B1 reading texts, but more engaging and conversational.
+- Naturally include: Präsens, Perfekt, Modalverben, Nebensätze, Relativsätze, Konjunktiv II, Passiv.
 
 VOCABULARY:
 - 10–15 useful words from the story.

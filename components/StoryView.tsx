@@ -53,9 +53,11 @@ function ClickableParagraph({ text, onWordClick }: ParagraphProps) {
 
 type Props = {
   story: Story;
+  onRegenerate?: () => void;
+  regenerating?: boolean;
 };
 
-export default function StoryView({ story }: Props) {
+export default function StoryView({ story, onRegenerate, regenerating }: Props) {
   const [popup, setPopup] = useState<PopupState | null>(null);
 
   const handleWordClick = useCallback((word: string, sentence: string, x: number, y: number) => {
@@ -71,13 +73,26 @@ export default function StoryView({ story }: Props) {
 
       {/* Story header */}
       <div className="mb-6 sm:mb-8">
-        <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-3">
-          <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full">
-            {story.difficulty}
-          </span>
-          <span className="text-xs text-gray-400">{story.date}</span>
-          <span className="text-xs text-gray-400">·</span>
-          <span className="text-xs text-gray-500">{story.topic}</span>
+        <div className="flex items-start justify-between gap-4 mb-2 sm:mb-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full">
+              {story.difficulty}
+            </span>
+            <span className="text-xs text-gray-400">{story.date}</span>
+            <span className="text-xs text-gray-400">·</span>
+            <span className="text-xs text-gray-500">{story.topic}</span>
+          </div>
+          {onRegenerate && (
+            <button
+              onClick={onRegenerate}
+              disabled={regenerating}
+              title="Generate a new story"
+              className="flex-shrink-0 flex items-center gap-1.5 text-xs text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50 print:hidden"
+            >
+              <span className={`text-base leading-none ${regenerating ? "animate-spin inline-block" : ""}`}>↺</span>
+              <span className="hidden sm:inline">{regenerating ? "Generating…" : "New story"}</span>
+            </button>
+          )}
         </div>
         <h1 className="text-xl sm:text-3xl font-bold text-gray-900 leading-snug">{story.title}</h1>
         <p className="text-xs text-gray-400 mt-2">Tap any word to save it to your vocab list.</p>

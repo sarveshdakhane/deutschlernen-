@@ -267,6 +267,11 @@ Zu Hause legte er sich sofort hin. Seine Frau brachte ihm heiße Suppe und Kräu
   },
 ];
 
-export const getSampleStory = (): Story => sampleStories[0];
+let lastSampleIndex = -1;
+export const getSampleStory = (): Story => {
+  const next = (lastSampleIndex + 1) % sampleStories.length;
+  lastSampleIndex = next;
+  return sampleStories[next];
+};
 export const getSampleStoryBySlug = (slug: string): Story | undefined =>
   sampleStories.find((s) => s.slug === slug);
