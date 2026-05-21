@@ -1,15 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
-import { generateStory } from "@/lib/claude";
+import { NextResponse } from "next/server";
+import { generateDailyReadings } from "@/lib/claude";
 
-export async function GET(request: NextRequest) {
-  const topic = request.nextUrl.searchParams.get("topic") ?? undefined;
-
+export async function GET() {
   try {
-    const story = await generateStory(topic);
-    story.date = new Date().toISOString().split("T")[0];
-    return NextResponse.json(story);
+    const readings = await generateDailyReadings();
+    return NextResponse.json(readings);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to generate story";
+    const message = error instanceof Error ? error.message : "Failed to generate readings";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

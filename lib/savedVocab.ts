@@ -1,37 +1,32 @@
 import { SavedVocabItem } from "./types";
 
-const KEY = "saved-vocab";
-
-export function getSavedVocab(): SavedVocabItem[] {
-  if (typeof window === "undefined") return [];
+export async function getSavedVocab(): Promise<SavedVocabItem[]> {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? "[]");
+    const res = await fetch("/api/vocab");
+    if (!res.ok) return [];
+    return await res.json();
   } catch {
     return [];
   }
 }
 
-export function isVocabSaved(word: string, storySlug: string): boolean {
-  return getSavedVocab().some((v) => v.word === word && v.storySlug === storySlug);
+export async function isVocabSaved(word: string): Promise<boolean> {
+  const items = await getSavedVocab();
+  return items.some((v) => v.word.toLowerCase() === word.toLowerCase());
 }
 
-export function addToVocab(item: SavedVocabItem): void {
-  const current = getSavedVocab().filter(
-    (v) => !(v.word === item.word && v.storySlug === item.storySlug)
-  );
-  current.push(item);
-  localStorage.setItem(KEY, JSON.stringify(current));
+export async function addToVocab(item: SavedVocabItem): Promise<void> {
+  await fetch("/api/vocab", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(item),
+  });
 }
 
-export function toggleSavedVocab(item: SavedVocabItem): boolean {
-  const current = getSavedVocab();
-  const idx = current.findIndex((v) => v.word === item.word && v.storySlug === item.storySlug);
-  if (idx >= 0) {
-    current.splice(idx, 1);
-    localStorage.setItem(KEY, JSON.stringify(current));
-    return false;
-  }
-  current.push(item);
-  localStorage.setItem(KEY, JSON.stringify(current));
-  return true;
+export async function removeFromVocab(word: string): Promise<void> {
+  await fetch("/api/vocab", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ word }),
+  });
 }

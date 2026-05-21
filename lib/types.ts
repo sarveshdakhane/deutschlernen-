@@ -25,12 +25,15 @@ export type QuizQuestion = {
   answer: number;
 };
 
+export type ReadingType = "news" | "dialogue" | "story" | "speaking";
+
 export type Story = {
   slug: string;
   title: string;
   date: string;
   topic: string;
-  difficulty: "B1";
+  difficulty: "B1" | "A2";
+  readingType: ReadingType;
   story: string;
   grammarChecklist: {
     praesens: boolean;

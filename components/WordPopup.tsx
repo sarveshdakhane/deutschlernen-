@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { addToVocab, isVocabSaved } from "@/lib/savedVocab";
+
 import { VocabularyItem } from "@/lib/types";
 
 type Props = {
@@ -29,8 +30,12 @@ export default function WordPopup({
   word, sentence, storySlug, storyTitle, storyVocabulary, position, onClose,
 }: Props) {
   const [card, setCard] = useState<CardState>({ status: "loading" });
-  const [saved, setSaved] = useState(() => isVocabSaved(word, storySlug));
+  const [saved, setSaved] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+
+  useEffect(() => {
+    isVocabSaved(word).then(setSaved);
+  }, [word]);
   const ref = useRef<HTMLDivElement>(null);
   const mobile = isMobileViewport();
 
@@ -79,8 +84,8 @@ export default function WordPopup({
     };
   }, [onClose]);
 
-  const handleSave = (meaning: string, example: string) => {
-    addToVocab({ word, meaning, example, storySlug, storyTitle, savedAt: new Date().toISOString() });
+  const handleSave = async (meaning: string, example: string) => {
+    await addToVocab({ word, meaning, example, storySlug, storyTitle, savedAt: new Date().toISOString() });
     setSaved(true);
     setJustSaved(true);
     setTimeout(onClose, 900);
@@ -156,20 +161,14 @@ function ReadyCard({ meaning, example, onSave }: {
   meaning: string; example: string; onSave: (m: string, e: string) => void;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div>
         <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">English meaning</p>
         <p className="text-base font-medium text-gray-800">{meaning}</p>
       </div>
-      {example && (
-        <div>
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Example</p>
-          <p className="text-sm text-gray-600 italic leading-relaxed">{example}</p>
-        </div>
-      )}
       <button
         onClick={() => onSave(meaning, example)}
-        className="w-full mt-1 py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 active:bg-blue-800 transition-colors"
+        className="w-full py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 active:bg-blue-800 transition-colors"
       >
         Save to Vocab
       </button>

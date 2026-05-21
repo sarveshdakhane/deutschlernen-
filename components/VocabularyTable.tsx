@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { VocabularyItem } from "@/lib/types";
-import { isVocabSaved, toggleSavedVocab } from "@/lib/savedVocab";
+import { getSavedVocab, addToVocab, removeFromVocab } from "@/lib/savedVocab";
 
 type Props = {
   vocabulary: VocabularyItem[];
@@ -15,25 +15,32 @@ export default function VocabularyTable({ vocabulary, showMeanings, storySlug, s
   const [saved, setSaved] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (!storySlug) return;
-    const state: Record<string, boolean> = {};
-    for (const item of vocabulary) {
-      state[item.word] = isVocabSaved(item.word, storySlug);
-    }
-    setSaved(state);
-  }, [vocabulary, storySlug]);
-
-  const handleToggle = (item: VocabularyItem) => {
-    if (!storySlug || !storyTitle) return;
-    const isSaved = toggleSavedVocab({
-      word: item.word,
-      meaning: item.meaning,
-      example: item.example,
-      storySlug,
-      storyTitle,
-      savedAt: new Date().toISOString(),
+    getSavedVocab().then((items) => {
+      const state: Record<string, boolean> = {};
+      for (const item of vocabulary) {
+        state[item.word] = items.some(
+          (v) => v.word.toLowerCase() === item.word.toLowerCase()
+        );
+      }
+      setSaved(state);
     });
-    setSaved((prev) => ({ ...prev, [item.word]: isSaved }));
+  }, [vocabulary]);
+
+  const handleToggle = async (item: VocabularyItem) => {
+    if (saved[item.word]) {
+      await removeFromVocab(item.word);
+      setSaved((prev) => ({ ...prev, [item.word]: false }));
+    } else {
+      await addToVocab({
+        word: item.word,
+        meaning: item.meaning,
+        example: item.example,
+        storySlug: storySlug ?? "",
+        storyTitle: storyTitle ?? "",
+        savedAt: new Date().toISOString(),
+      });
+      setSaved((prev) => ({ ...prev, [item.word]: true }));
+    }
   };
 
   return (
@@ -48,35 +55,24 @@ export default function VocabularyTable({ vocabulary, showMeanings, storySlug, s
                 <th className="text-left px-4 py-3 font-medium text-gray-700 w-1/4">English meaning</th>
               )}
               <th className="text-left px-4 py-3 font-medium text-gray-700">Example sentence</th>
-              {storySlug && <th className="px-3 py-3 w-10" />}
+              <th className="px-3 py-3 w-10" />
             </tr>
           </thead>
           <tbody>
             {vocabulary.map((item, i) => (
-              <tr
-                key={i}
-                className={`border-b border-gray-100 last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
-              >
+              <tr key={i} className={`border-b border-gray-100 last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
                 <td className="px-4 py-3 font-medium text-gray-900">{item.word}</td>
-                {showMeanings && (
-                  <td className="px-4 py-3 text-gray-600">{item.meaning}</td>
-                )}
+                {showMeanings && <td className="px-4 py-3 text-gray-600">{item.meaning}</td>}
                 <td className="px-4 py-3 text-gray-600 italic">{item.example}</td>
-                {storySlug && (
-                  <td className="px-3 py-3 text-center">
-                    <button
-                      onClick={() => handleToggle(item)}
-                      title={saved[item.word] ? "Remove from vocab list" : "Save to vocab list"}
-                      className={`text-lg leading-none transition-colors ${
-                        saved[item.word]
-                          ? "text-yellow-400 hover:text-gray-300"
-                          : "text-gray-200 hover:text-yellow-400"
-                      }`}
-                    >
-                      ★
-                    </button>
-                  </td>
-                )}
+                <td className="px-3 py-3 text-center">
+                  <button
+                    onClick={() => handleToggle(item)}
+                    title={saved[item.word] ? "Remove from vocab" : "Save to vocab"}
+                    className={`text-lg leading-none transition-colors ${saved[item.word] ? "text-yellow-400 hover:text-gray-300" : "text-gray-200 hover:text-yellow-400"}`}
+                  >
+                    ★
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

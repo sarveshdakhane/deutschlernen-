@@ -9,9 +9,8 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Deutsch lernen",
-  description:
-    "Daily German B1 reading, vocabulary, sentence patterns, and writing practice.",
+  title: "Today's Read",
+  description: "Daily German B1 reading and vocabulary practice.",
 };
 
 export default function RootLayout({
@@ -26,7 +25,7 @@ export default function RootLayout({
         <div className="flex-1">{children}</div>
         <footer className="border-t border-gray-100 bg-white mt-8 print:hidden">
           <div className="max-w-4xl mx-auto px-4 py-4 text-center text-xs text-gray-400">
-            Deutsch lernen — powered by Claude AI
+            Today's Read
           </div>
         </footer>
       </body>

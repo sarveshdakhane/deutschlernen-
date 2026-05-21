@@ -1,9 +1,16 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Story } from "@/lib/types";
+import { Story, ReadingType } from "@/lib/types";
 import WordPopup from "./WordPopup";
 import QuizSection from "./QuizSection";
+
+const TYPE_CONFIG: Record<ReadingType, { label: string; icon: string; bg: string; text: string }> = {
+  news:     { label: "Nachrichten", icon: "📰", bg: "bg-blue-50",   text: "text-blue-700" },
+  dialogue: { label: "Gespräch",    icon: "💬", bg: "bg-violet-50", text: "text-violet-700" },
+  story:    { label: "Geschichte",  icon: "📖", bg: "bg-emerald-50",text: "text-emerald-700" },
+  speaking: { label: "A2 Sprechen", icon: "🗣️", bg: "bg-orange-50", text: "text-orange-700" },
+};
 
 type PopupState = {
   word: string;
@@ -53,11 +60,10 @@ function ClickableParagraph({ text, onWordClick }: ParagraphProps) {
 
 type Props = {
   story: Story;
-  onRegenerate?: () => void;
-  regenerating?: boolean;
+  onBack?: () => void;
 };
 
-export default function StoryView({ story, onRegenerate, regenerating }: Props) {
+export default function StoryView({ story, onBack }: Props) {
   const [popup, setPopup] = useState<PopupState | null>(null);
 
   const handleWordClick = useCallback((word: string, sentence: string, x: number, y: number) => {
@@ -67,32 +73,31 @@ export default function StoryView({ story, onRegenerate, regenerating }: Props) 
   const closePopup = useCallback(() => setPopup(null), []);
 
   const paragraphs = story.story.split(/\n+/).filter(Boolean);
+  const cfg = TYPE_CONFIG[story.readingType];
 
   return (
     <article className="max-w-5xl mx-auto px-3 sm:px-6 py-6 sm:py-10">
 
-      {/* Story header */}
+      {/* Back button */}
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 transition-colors mb-5 print:hidden"
+        >
+          ← Back to today&apos;s edition
+        </button>
+      )}
+
+      {/* Reading header */}
       <div className="mb-6 sm:mb-8">
-        <div className="flex items-start justify-between gap-4 mb-2 sm:mb-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full">
-              {story.difficulty}
-            </span>
-            <span className="text-xs text-gray-400">{story.date}</span>
-            <span className="text-xs text-gray-400">·</span>
-            <span className="text-xs text-gray-500">{story.topic}</span>
-          </div>
-          {onRegenerate && (
-            <button
-              onClick={onRegenerate}
-              disabled={regenerating}
-              title="Generate a new story"
-              className="flex-shrink-0 flex items-center gap-1.5 text-xs text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50 print:hidden"
-            >
-              <span className={`text-base leading-none ${regenerating ? "animate-spin inline-block" : ""}`}>↺</span>
-              <span className="hidden sm:inline">{regenerating ? "Generating…" : "New story"}</span>
-            </button>
-          )}
+        <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-3">
+          <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.text}`}>
+            <span>{cfg.icon}</span>
+            {cfg.label}
+          </span>
+          <span className="text-xs text-gray-400">{story.date}</span>
+          <span className="text-xs text-gray-400">·</span>
+          <span className="text-xs text-gray-500">{story.topic}</span>
         </div>
         <h1 className="text-xl sm:text-3xl font-bold text-gray-900 leading-snug">{story.title}</h1>
         <p className="text-xs text-gray-400 mt-2">Tap any word to save it to your vocab list.</p>
