@@ -36,7 +36,7 @@ type ParagraphProps = {
 function ClickableParagraph({ text, onWordClick }: ParagraphProps) {
   const tokens = text.split(/(\s+)/);
   return (
-    <p className="text-[17px] sm:text-[18px] leading-[1.85] sm:leading-[1.9] text-gray-800 text-left sm:text-justify" lang="de">
+    <p className="text-[17px] sm:text-[18px] leading-[1.85] sm:leading-[1.9] text-gray-800 text-left sm:text-justify hyphens-none" lang="de">
       {tokens.map((token, i) => {
         if (/^\s+$/.test(token)) return token;
         const word = cleanWord(token);
