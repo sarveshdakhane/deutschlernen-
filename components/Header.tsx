@@ -13,11 +13,6 @@ export default function Header() {
         <Link href="/" onClick={handleHome} className="text-gray-900 font-semibold text-base sm:text-lg tracking-tight hover:text-gray-600 transition-colors">
           Today's Read
         </Link>
-        <nav className="flex gap-1 sm:gap-2 text-sm text-gray-500">
-          <Link href="/vocab" className="px-3 py-1.5 rounded-lg hover:bg-gray-100 hover:text-gray-900 transition-colors">
-            Vocab
-          </Link>
-        </nav>
       </div>
     </header>
   );

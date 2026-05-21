@@ -147,7 +147,7 @@ export default function StoryView({ story, onBack }: Props) {
           <span className="text-xs text-gray-500">{story.topic}</span>
         </div>
         <h1 className="text-xl sm:text-3xl font-bold text-gray-900 leading-snug">{story.title}</h1>
-        <p className="text-xs text-gray-400 mt-2">Tap any word to save it to your vocab list.</p>
+        <p className="text-xs text-gray-400 mt-2">Tap any word to see its English translation.</p>
       </div>
 
       {/* Story text */}
@@ -178,8 +178,6 @@ export default function StoryView({ story, onBack }: Props) {
         <WordPopup
           word={popup.word}
           sentence={popup.sentence}
-          storySlug={story.slug}
-          storyTitle={story.title}
           storyVocabulary={story.vocabulary}
           position={{ x: popup.x, y: popup.y }}
           onClose={closePopup}
