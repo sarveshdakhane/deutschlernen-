@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Story, ReadingType } from "@/lib/types";
 import StoryView from "@/components/StoryView";
 
@@ -19,44 +19,21 @@ export default function HomePage() {
   const [readings, setReadings] = useState<Story[]>([]);
   const [selected, setSelected] = useState<Story | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchReadings = async (): Promise<Story[]> => {
-    const res = await fetch("/api/generate-story");
-    if (!res.ok) throw new Error("Server error");
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    if (!Array.isArray(data)) throw new Error("Unexpected response");
-    return data as Story[];
-  };
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setReadings(await fetchReadings());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    fetch("/api/generate-story")
+      .then((res) => {
+        if (!res.ok) throw new Error("Server error");
+        return res.json();
+      })
+      .then((data) => {
+        if (!Array.isArray(data)) throw new Error("Unexpected response");
+        setReadings(data as Story[]);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Unknown error"))
+      .finally(() => setLoading(false));
   }, []);
-
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
-    setSelected(null);
-    setError(null);
-    try {
-      setReadings(await fetchReadings());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   if (selected) {
     return (
@@ -78,17 +55,6 @@ export default function HomePage() {
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight">Today&apos;s Edition</h1>
           {!loading && <p className="text-sm text-gray-400 mt-1">{formatDate(today)}</p>}
         </div>
-        {!loading && (
-          <button
-            onClick={refresh}
-            disabled={refreshing}
-            title="Generate new readings"
-            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50 mt-1"
-          >
-            <span className={`text-lg leading-none ${refreshing ? "animate-spin inline-block" : ""}`}>↺</span>
-            <span className="hidden sm:inline text-xs">{refreshing ? "Loading…" : "New edition"}</span>
-          </button>
-        )}
       </div>
 
       {/* Loading */}
@@ -108,7 +74,7 @@ export default function HomePage() {
       {error && (
         <div className="text-center py-16 border border-dashed border-gray-200 rounded-2xl">
           <p className="text-gray-400 text-sm mb-3">{error}</p>
-          <button onClick={load} className="text-sm text-blue-600 hover:underline">Try again</button>
+          <button onClick={() => window.location.reload()} className="text-sm text-blue-600 hover:underline">Try again</button>
         </div>
       )}
 
@@ -143,18 +109,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Refreshing overlay on list */}
-      {refreshing && (
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 mt-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 animate-pulse h-36">
-              <div className="h-4 w-20 bg-gray-100 rounded-full mb-3" />
-              <div className="h-4 w-full bg-gray-100 rounded-full mb-2" />
-              <div className="h-4 w-3/4 bg-gray-100 rounded-full" />
-            </div>
-          ))}
-        </div>
-      )}
+
     </main>
   );
 }
