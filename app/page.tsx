@@ -35,6 +35,12 @@ export default function HomePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    const handler = () => setSelected(null);
+    window.addEventListener("todays-read-home", handler);
+    return () => window.removeEventListener("todays-read-home", handler);
+  }, []);
+
   if (selected) {
     return (
       <StoryView
