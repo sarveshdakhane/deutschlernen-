@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   const exists = items.some((v) => v.word.toLowerCase() === item.word.toLowerCase());
   if (!exists) {
     items.push(item);
-    writeVocab(items);
+    try { writeVocab(items); } catch { /* read-only fs — ignore */ }
   }
   return NextResponse.json({ ok: true, duplicate: exists });
 }
@@ -28,6 +28,6 @@ export async function DELETE(request: NextRequest) {
   const items = readVocab().filter(
     (v) => v.word.toLowerCase() !== word.toLowerCase()
   );
-  writeVocab(items);
+  try { writeVocab(items); } catch { /* read-only fs — ignore */ }
   return NextResponse.json({ ok: true });
 }

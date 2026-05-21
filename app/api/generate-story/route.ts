@@ -10,7 +10,7 @@ export async function GET() {
 
   try {
     const readings = await generateDailyReadings();
-    writeCache(readings);
+    try { writeCache(readings); } catch { /* cache write failed — serve anyway */ }
     return NextResponse.json(readings);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to generate readings";
