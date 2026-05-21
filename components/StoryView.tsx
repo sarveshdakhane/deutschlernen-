@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Story, ReadingType } from "@/lib/types";
 import WordPopup from "./WordPopup";
 import QuizSection from "./QuizSection";
@@ -65,6 +65,10 @@ type Props = {
 
 export default function StoryView({ story, onBack }: Props) {
   const [popup, setPopup] = useState<PopupState | null>(null);
+  const [swipeX, setSwipeX] = useState(0);
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const edgeSwipe = useRef(false);
 
   const handleWordClick = useCallback((word: string, sentence: string, x: number, y: number) => {
     setPopup({ word, sentence, x, y });
@@ -72,11 +76,54 @@ export default function StoryView({ story, onBack }: Props) {
 
   const closePopup = useCallback(() => setPopup(null), []);
 
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    edgeSwipe.current = e.touches[0].clientX < 32;
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!edgeSwipe.current || !onBack) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
+    if (dy > dx) { edgeSwipe.current = false; setSwipeX(0); return; }
+    setSwipeX(Math.max(0, dx));
+  };
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (!edgeSwipe.current || !onBack) { setSwipeX(0); return; }
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
+    setSwipeX(0);
+    edgeSwipe.current = false;
+    if (dx > 80 && dy < 80) onBack();
+  };
+
   const paragraphs = story.story.split(/\n+/).filter(Boolean);
   const cfg = TYPE_CONFIG[story.readingType];
 
+  const swipeProgress = Math.min(1, swipeX / 120);
+
   return (
-    <article className="max-w-5xl mx-auto px-3 sm:px-6 py-6 sm:py-10">
+    <article
+      className="max-w-5xl mx-auto px-3 sm:px-6 py-6 sm:py-10"
+      style={{
+        transform: swipeX > 0 ? `translateX(${swipeX * 0.35}px)` : undefined,
+        transition: swipeX === 0 ? "transform 0.2s ease" : "none",
+      }}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
+      {/* Swipe-back indicator */}
+      {swipeProgress > 0 && (
+        <div
+          className="fixed left-0 top-1/2 -translate-y-1/2 z-50 flex items-center justify-center bg-white rounded-r-2xl shadow-lg"
+          style={{ width: 40 + swipeX * 0.15, height: 56, opacity: Math.min(1, swipeProgress * 1.5) }}
+        >
+          <span className="text-gray-500 text-lg">←</span>
+        </div>
+      )}
 
       {/* Back button */}
       {onBack && (
