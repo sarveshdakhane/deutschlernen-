@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import { Story, ReadingType } from "./types";
 import { buildPromptForType } from "./storyPrompt";
 import { getSampleForType } from "./sampleStories";
@@ -53,56 +53,43 @@ function validateStory(data: unknown, expectedType: ReadingType): Story {
 }
 
 async function generateOneReading(type: ReadingType, apiKey: string): Promise<Story> {
-  const client = new Anthropic({ apiKey });
+  const client = new Groq({ apiKey });
   const prompt = buildPromptForType(type);
 
-  const message = await client.messages.create({
-    model: "claude-opus-4-7",
-    max_tokens: 4096,
+  const completion = await client.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
     messages: [{ role: "user", content: prompt }],
+    max_tokens: 4096,
+    temperature: 0.8,
   });
 
-  const text = message.content[0]?.type === "text" ? message.content[0].text : "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const raw = completion.choices[0]?.message?.content ?? "";
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("No JSON found in response");
+  const text = jsonMatch[0].replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
 
-  const parsed = JSON.parse(jsonMatch[0]);
-  return validateStory(parsed, type);
+  return validateStory(JSON.parse(text), type);
 }
 
 export async function generateDailyReadings(): Promise<Story[]> {
   const types: ReadingType[] = ["news", "dialogue", "story", "speaking"];
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   const today = new Date().toISOString().split("T")[0];
 
   if (!apiKey) {
-    console.error("[generate] ANTHROPIC_API_KEY is not set — returning sample stories");
+    console.error("[generate] GROQ_API_KEY is not set — returning sample stories");
     return types.map((t) => ({ ...getSampleForType(t), date: today }));
   }
 
-  const results = await Promise.allSettled(
-    types.map((type) => generateOneReading(type, apiKey))
-  );
-
-  return results.map((result, i) => {
-    if (result.status === "fulfilled") {
-      return { ...result.value, date: today };
+  const readings: Story[] = [];
+  for (let i = 0; i < types.length; i++) {
+    try {
+      const story = await generateOneReading(types[i], apiKey);
+      readings.push({ ...story, date: today });
+    } catch (err) {
+      console.error(`[generate] Failed to generate "${types[i]}":`, err);
+      readings.push({ ...getSampleForType(types[i]), date: today });
     }
-    console.error(`[generate] Failed to generate "${types[i]}":`, result.reason);
-    return { ...getSampleForType(types[i]), date: today };
-  });
-}
-
-export async function generateStory(topic?: string): Promise<Story> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const today = new Date().toISOString().split("T")[0];
-
-  if (!apiKey) return { ...getSampleForType("story"), date: today };
-
-  try {
-    const story = await generateOneReading("story", apiKey);
-    return { ...story, date: today };
-  } catch {
-    return { ...getSampleForType("story"), date: today };
   }
+  return readings;
 }
