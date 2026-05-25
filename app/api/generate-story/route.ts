@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { generateDailyReadings } from "@/lib/claude";
 import { getTodayReadings, writeCache } from "@/lib/readingsCache.server";
 
-export async function GET() {
-  const cached = getTodayReadings();
+export async function GET(request: Request) {
+  const force = new URL(request.url).searchParams.get("force") === "true";
+  const cached = !force && getTodayReadings();
   if (cached) {
     return NextResponse.json(cached);
   }
