@@ -1,17 +1,27 @@
 import { NextResponse } from "next/server";
 import { generateDailyReadings } from "@/lib/claude";
-import { getTodayReadings, writeCache } from "@/lib/readingsCache.server";
+import { unstable_cache } from "next/cache";
 
 export const maxDuration = 60;
 
 export async function GET(request: Request) {
   const force = new URL(request.url).searchParams.get("force") === "true";
-  const cached = !force && getTodayReadings();
-  if (cached) return NextResponse.json(cached);
 
   try {
-    const readings = await generateDailyReadings();
-    try { writeCache(readings); } catch { /* read-only fs on Vercel */ }
+    let readings;
+
+    if (force) {
+      readings = await generateDailyReadings();
+    } else {
+      const today = new Date().toISOString().split("T")[0];
+      const getCached = unstable_cache(
+        () => generateDailyReadings(),
+        [`daily-readings-${today}`],
+        { revalidate: 86400 }
+      );
+      readings = await getCached();
+    }
+
     return NextResponse.json(readings);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to generate readings";
