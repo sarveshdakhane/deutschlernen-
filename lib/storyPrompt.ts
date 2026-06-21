@@ -4,6 +4,7 @@ const JSON_TEMPLATE = (readingType: ReadingType) => `{
   "title": "",
   "date": "",
   "topic": "",
+  "imageKeyword": "",
   "difficulty": "B1",
   "readingType": "${readingType}",
   "story": "",
@@ -87,6 +88,9 @@ Return this exact JSON structure:
 
 ${JSON_TEMPLATE("news")}
 
+IMAGE KEYWORD:
+- "imageKeyword": 2–3 simple English words for a Pixabay photo search that visually matches the story (e.g. "berlin parliament", "cafe friends", "doctor patient", "moving boxes"). Avoid abstract words — pick something a photo can show.
+
 Return JSON only. No markdown. No explanations outside JSON.`;
 }
 
@@ -154,6 +158,9 @@ Return this exact JSON structure:
 
 ${JSON_TEMPLATE("dialogue")}
 
+IMAGE KEYWORD:
+- "imageKeyword": 2–3 simple English words for a Pixabay photo search that visually matches the story (e.g. "berlin parliament", "cafe friends", "doctor patient", "moving boxes"). Avoid abstract words — pick something a photo can show.
+
 Return JSON only. No markdown. No explanations outside JSON.`;
 }
 
@@ -194,6 +201,9 @@ QUIZ — Multiple Choice:
 Return this exact JSON structure:
 
 ${JSON_TEMPLATE("story")}
+
+IMAGE KEYWORD:
+- "imageKeyword": 2–3 simple English words for a Pixabay photo search that visually matches the story (e.g. "berlin parliament", "cafe friends", "doctor patient", "moving boxes"). Avoid abstract words — pick something a photo can show.
 
 Return JSON only. No markdown. No explanations outside JSON.`;
 }
@@ -290,6 +300,9 @@ Return this exact JSON structure:
     ]
   }
 }
+
+IMAGE KEYWORD:
+- "imageKeyword": 2–3 simple English words for a Pixabay photo search that visually matches the story (e.g. "berlin parliament", "cafe friends", "doctor patient", "moving boxes"). Avoid abstract words — pick something a photo can show.
 
 Return JSON only. No markdown. No explanations outside JSON.`;
 }

@@ -5,6 +5,7 @@ const newsSample: Story = {
   title: "Mietpreise steigen weiter in deutschen Großstädten",
   date: "2026-05-21",
   topic: "Housing costs in Germany",
+  imageKeyword: "apartment building germany",
   difficulty: "B1",
   readingType: "news",
   story: `Berlin (dpa) – Die Mietpreise in deutschen Großstädten sind auch im letzten Jahr weiter gestiegen. Laut einer neuen Studie des Instituts für Wohnungsmarktforschung zahlen Mieter in München, Frankfurt und Berlin besonders hohe Preise. In München kostet eine durchschnittliche Zweizimmerwohnung jetzt über 1.800 Euro im Monat – das sind zehn Prozent mehr als vor zwei Jahren.
@@ -52,6 +53,7 @@ const dialogueSample: Story = {
   title: "Wohnungssuche in Berlin",
   date: "2026-05-21",
   topic: "Flat hunting in a big city",
+  imageKeyword: "berlin city apartment",
   difficulty: "B1",
   readingType: "dialogue",
   story: `Mia und Jonas sind Freunde. Mia sucht seit drei Monaten eine neue Wohnung in Berlin und ruft Jonas an, um ihm davon zu erzählen.
@@ -116,6 +118,7 @@ const storySamples: Story[] = [
     title: "Der Umzug in eine neue Stadt",
     date: "2026-05-21",
     topic: "Moving to a new city",
+    imageKeyword: "moving boxes new home",
     difficulty: "B1",
     readingType: "story",
     story: `Lena hatte sich lange überlegt, ob sie nach München ziehen sollte. Die Stelle, die ihr angeboten wurde, war sehr gut bezahlt, aber sie kannte niemanden in der Stadt. Nach langen Gesprächen mit ihrer Familie entschied sie sich schließlich für den Umzug.
@@ -162,6 +165,7 @@ Manchmal vermisste sie ihre alte Stadt und ihre Freunde. Aber langsam begann Mü
     title: "Ein Besuch beim Arzt",
     date: "2026-05-21",
     topic: "Visiting the doctor",
+    imageKeyword: "doctor patient clinic",
     difficulty: "B1",
     readingType: "story",
     story: `Markus hatte seit drei Tagen Halsschmerzen und Fieber. Er wollte zuerst einfach zu Hause bleiben und viel Tee trinken, aber seine Frau bestand darauf, dass er zum Arzt gehen sollte. Also rief er morgens früh in der Praxis an und bat um einen Termin.
@@ -208,6 +212,7 @@ const speakingSample: Story = {
   title: "Im Café bestellen",
   date: "2026-05-21",
   topic: "Ordering at a café",
+  imageKeyword: "cafe coffee friends",
   difficulty: "A2",
   readingType: "speaking",
   story: `Lena und Tom gehen zusammen in ein Café. Sie suchen einen Tisch und setzen sich.

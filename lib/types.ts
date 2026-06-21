@@ -24,6 +24,8 @@ export type Story = {
   date: string;
   topic: string;
   difficulty: "B1" | "A2";
+  imageKeyword?: string;
+  imageUrl?: string;
   readingType: ReadingType;
   story: string;
   grammarChecklist: {

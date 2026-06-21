@@ -57,7 +57,7 @@ export default function HomePage() {
     <main className="max-w-2xl mx-auto px-4 py-8 sm:py-10">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight">Today&apos;s Edition</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight">Today&apos;s Read</h1>
         {!loading && !error && <p className="text-sm text-gray-400 mt-1">{formatDate(today)}</p>}
       </div>
 
@@ -90,22 +90,31 @@ export default function HomePage() {
               <button
                 key={reading.slug}
                 onClick={() => setSelected(reading)}
-                className="text-left bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 hover:border-gray-300 hover:shadow-md transition-all group flex flex-col"
+                className="text-left bg-white border border-gray-200 rounded-2xl hover:border-gray-300 hover:shadow-md transition-all group flex flex-col overflow-hidden"
               >
-                <div className="flex items-center gap-1.5 mb-2.5">
-                  <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}>
-                    <span>{cfg.icon}</span>
-                    {cfg.label}
-                  </span>
-                  <span className="text-xs text-gray-400">{reading.difficulty}</span>
+                {reading.imageUrl && (
+                  <img
+                    src={reading.imageUrl}
+                    alt={reading.topic}
+                    className="w-full h-32 sm:h-36 object-cover"
+                  />
+                )}
+                <div className="p-4 sm:p-5 flex flex-col flex-1">
+                  <div className="flex items-center gap-1.5 mb-2.5">
+                    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}>
+                      <span>{cfg.icon}</span>
+                      {cfg.label}
+                    </span>
+                    <span className="text-xs text-gray-400">{reading.difficulty}</span>
+                  </div>
+                  <h2 className="text-sm sm:text-base font-semibold text-gray-900 leading-snug mb-1.5 group-hover:text-blue-700 transition-colors flex-1">
+                    {reading.title}
+                  </h2>
+                  <p className="text-xs text-gray-500 line-clamp-1">{reading.topic}</p>
+                  <p className="text-xs text-gray-400 mt-3 font-medium group-hover:text-blue-600 transition-colors">
+                    Lesen →
+                  </p>
                 </div>
-                <h2 className="text-sm sm:text-base font-semibold text-gray-900 leading-snug mb-1.5 group-hover:text-blue-700 transition-colors flex-1">
-                  {reading.title}
-                </h2>
-                <p className="text-xs text-gray-500 line-clamp-1">{reading.topic}</p>
-                <p className="text-xs text-gray-400 mt-3 font-medium group-hover:text-blue-600 transition-colors">
-                  Lesen →
-                </p>
               </button>
             );
           })}

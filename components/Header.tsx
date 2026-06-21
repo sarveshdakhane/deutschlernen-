@@ -11,7 +11,7 @@ export default function Header() {
     <header className="border-b border-gray-100 bg-white print:hidden sticky top-0 z-30">
       <div className="max-w-4xl mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
         <Link href="/" onClick={handleHome} className="text-gray-900 font-semibold text-base sm:text-lg tracking-tight hover:text-gray-600 transition-colors">
-          Today's Read
+          Daily Deutsch
         </Link>
       </div>
     </header>

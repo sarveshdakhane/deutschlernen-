@@ -150,6 +150,17 @@ export default function StoryView({ story, onBack }: Props) {
         <p className="text-xs text-gray-400 mt-2">Tap any word to see its English translation.</p>
       </div>
 
+      {/* Cover image */}
+      {story.imageUrl && (
+        <div className="mb-4 sm:mb-6 rounded-2xl overflow-hidden border border-gray-200">
+          <img
+            src={story.imageUrl}
+            alt={story.topic}
+            className="w-full object-cover max-h-64 sm:max-h-80"
+          />
+        </div>
+      )}
+
       {/* Story text */}
       <section className="bg-white border border-gray-200 rounded-2xl px-5 py-7 sm:px-14 sm:py-12 mb-4 sm:mb-6 space-y-5 sm:space-y-6">
         {paragraphs.map((para, i) => (
@@ -178,7 +189,6 @@ export default function StoryView({ story, onBack }: Props) {
         <WordPopup
           word={popup.word}
           sentence={popup.sentence}
-          storyVocabulary={story.vocabulary}
           position={{ x: popup.x, y: popup.y }}
           onClose={closePopup}
         />

@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { VocabularyItem } from "@/lib/types";
 
 type Props = {
   word: string;
   sentence: string;
-  storyVocabulary: VocabularyItem[];
   position: { x: number; y: number };
   onClose: () => void;
 };
@@ -22,7 +20,7 @@ function isMobileViewport() {
   return typeof window !== "undefined" && window.innerWidth < 640;
 }
 
-export default function WordPopup({ word, sentence, storyVocabulary, position, onClose }: Props) {
+export default function WordPopup({ word, sentence, position, onClose }: Props) {
   const [card, setCard] = useState<CardState>({ status: "loading" });
   const ref = useRef<HTMLDivElement>(null);
   const mobile = isMobileViewport();
@@ -32,15 +30,7 @@ export default function WordPopup({ word, sentence, storyVocabulary, position, o
     (typeof window !== "undefined" ? window.innerWidth : 900) - POPUP_WIDTH - 8,
   );
 
-  // Resolve meaning: story vocab first, then API
   useEffect(() => {
-    const match = storyVocabulary.find(
-      (v) => v.word.toLowerCase() === word.toLowerCase(),
-    );
-    if (match) {
-      setCard({ status: "ready", meaning: match.meaning });
-      return;
-    }
     const params = new URLSearchParams({ word, sentence });
     fetch(`/api/translate-word?${params}`)
       .then((r) => r.json())
@@ -49,7 +39,7 @@ export default function WordPopup({ word, sentence, storyVocabulary, position, o
         else setCard({ status: "error" });
       })
       .catch(() => setCard({ status: "error" }));
-  }, [word, sentence, storyVocabulary]);
+  }, [word, sentence]);
 
   // Close on outside click or Escape
   useEffect(() => {

@@ -1,4 +1,4 @@
-import Groq from "groq-sdk";
+import OpenAI from "openai";
 import { Story, ReadingType } from "./types";
 import { buildPromptForType } from "./storyPrompt";
 import { getSampleForType } from "./sampleStories";
@@ -34,6 +34,7 @@ function validateStory(data: unknown, expectedType: ReadingType): Story {
     title: String(d.title),
     date: String(d.date),
     topic: String(d.topic),
+    imageKeyword: d.imageKeyword ? String(d.imageKeyword) : undefined,
     difficulty: d.difficulty === "A2" ? "A2" : "B1",
     readingType,
     story: String(d.story),
@@ -53,39 +54,59 @@ function validateStory(data: unknown, expectedType: ReadingType): Story {
 }
 
 async function generateOneReading(type: ReadingType, apiKey: string): Promise<Story> {
-  const client = new Groq({ apiKey });
+  const client = new OpenAI({ apiKey });
   const prompt = buildPromptForType(type);
 
   const completion = await client.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
+    model: "gpt-4o-mini",
     messages: [{ role: "user", content: prompt }],
     max_tokens: 4096,
     temperature: 0.8,
+    response_format: { type: "json_object" },
   });
 
   const raw = completion.choices[0]?.message?.content ?? "";
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("No JSON found in response");
-  const text = jsonMatch[0].replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
+  const text = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
 
   return validateStory(JSON.parse(text), type);
 }
 
+async function fetchPixabayImage(topic: string): Promise<string | undefined> {
+  const apiKey = process.env.PIXABAY_API_KEY;
+  if (!apiKey) return undefined;
+
+  try {
+    const query = encodeURIComponent(topic);
+    const url = `https://pixabay.com/api/?key=${apiKey}&q=${query}&image_type=photo&orientation=horizontal&safesearch=true&per_page=5&min_width=800`;
+    const res = await fetch(url);
+    if (!res.ok) return undefined;
+    const data = await res.json() as { hits?: { webformatURL: string }[] };
+    return data.hits?.[0]?.webformatURL;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function generateDailyReadings(): Promise<Story[]> {
   const types: ReadingType[] = ["news", "dialogue", "story", "speaking"];
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   const today = new Date().toISOString().split("T")[0];
 
   if (!apiKey) {
-    console.error("[generate] GROQ_API_KEY is not set — returning sample stories");
-    return types.map((t) => ({ ...getSampleForType(t), date: today }));
+    console.log("[generate] No OPENAI_API_KEY — using static dev stories (no API call made)");
+    const devStories = types.map((t) => ({ ...getSampleForType(t), date: today }));
+    for (const story of devStories) {
+      story.imageUrl = await fetchPixabayImage(story.topic);
+    }
+    return devStories;
   }
 
   const readings: Story[] = [];
   for (let i = 0; i < types.length; i++) {
     try {
       const story = await generateOneReading(types[i], apiKey);
-      readings.push({ ...story, date: today });
+      const imageUrl = await fetchPixabayImage(story.imageKeyword ?? story.topic);
+      readings.push({ ...story, date: today, imageUrl });
     } catch (err) {
       console.error(`[generate] Failed to generate "${types[i]}":`, err);
       readings.push({ ...getSampleForType(types[i]), date: today });
