@@ -5,10 +5,9 @@ import { unstable_cache } from "next/cache";
 
 export const maxDuration = 60;
 
-// Tracks which dates have already had tomorrow's prefetch triggered in this
-// serverless instance — prevents firing on every request.
 const prefetchedDates = new Set<string>();
 
+// Used only for tomorrow's prefetch — not for serving today's response.
 function getCachedReadings(date: string) {
   return unstable_cache(
     () => generateDailyReadings(date),
@@ -23,19 +22,28 @@ function getTomorrowDate() {
   return d.toISOString().split("T")[0];
 }
 
+// Seconds remaining until midnight — used as the CDN cache TTL so the cache
+// expires exactly when the day changes and fresh content is needed.
+function secondsUntilMidnight() {
+  const now = new Date();
+  const midnight = new Date(now);
+  midnight.setDate(midnight.getDate() + 1);
+  midnight.setHours(0, 0, 0, 0);
+  return Math.floor((midnight.getTime() - now.getTime()) / 1000);
+}
+
 export async function GET(request: Request) {
   const force = new URL(request.url).searchParams.get("force") === "true";
 
   try {
     const today = new Date().toISOString().split("T")[0];
+    const readings = await generateDailyReadings(today);
 
-    const readings = force
-      ? await generateDailyReadings(today)
-      : await getCachedReadings(today)();
-
-    // Only schedule the prefetch once per serverless instance per day.
-    // unstable_cache ensures actual generation only happens once across all instances.
-    if (!prefetchedDates.has(today)) {
+    // After sending today's response, pre-generate tomorrow in background.
+    // Only fires once per serverless instance (prefetchedDates guard) and only
+    // on CDN misses — when the CDN serves the cached response the function
+    // isn't invoked at all, so after() never runs for cached requests.
+    if (!force && !prefetchedDates.has(today)) {
       prefetchedDates.add(today);
       after(async () => {
         const tomorrow = getTomorrowDate();
@@ -48,7 +56,15 @@ export async function GET(request: Request) {
       });
     }
 
-    return NextResponse.json(readings);
+    // Cache the response at Vercel's CDN edge until midnight.
+    // All devices and browsers share this one cached response — the serverless
+    // function is not invoked again until the CDN TTL expires.
+    const ttl = secondsUntilMidnight();
+    return NextResponse.json(readings, {
+      headers: force
+        ? { "Cache-Control": "no-store" }
+        : { "Cache-Control": `public, s-maxage=${ttl}, stale-while-revalidate=30` },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to generate readings";
     return NextResponse.json({ error: message }, { status: 500 });
