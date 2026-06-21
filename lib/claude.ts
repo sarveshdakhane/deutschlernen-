@@ -87,14 +87,30 @@ async function fetchPixabayImage(topic: string): Promise<string | undefined> {
   }
 }
 
-export async function generateDailyReadings(): Promise<Story[]> {
+// Per-instance promise cache — if two requests hit the same cold instance before
+// unstable_cache propagates, they share one Promise and one OpenAI call.
+const inflightByDate = new Map<string, Promise<Story[]>>();
+
+export function generateDailyReadings(date?: string): Promise<Story[]> {
+  const targetDate = date ?? new Date().toISOString().split("T")[0];
+
+  const inflight = inflightByDate.get(targetDate);
+  if (inflight) return inflight;
+
+  const promise = _generateDailyReadings(targetDate);
+  inflightByDate.set(targetDate, promise);
+  // Clean up after settling so the Map doesn't grow forever
+  promise.finally(() => inflightByDate.delete(targetDate));
+  return promise;
+}
+
+async function _generateDailyReadings(targetDate: string): Promise<Story[]> {
   const types: ReadingType[] = ["news", "dialogue", "story", "speaking"];
   const apiKey = process.env.OPENAI_API_KEY;
-  const today = new Date().toISOString().split("T")[0];
 
   if (!apiKey) {
     console.log("[generate] No OPENAI_API_KEY — using static dev stories (no API call made)");
-    const devStories = types.map((t) => ({ ...getSampleForType(t), date: today }));
+    const devStories = types.map((t) => ({ ...getSampleForType(t), date: targetDate }));
     await Promise.all(
       devStories.map(async (story) => {
         story.imageUrl = await fetchPixabayImage(story.imageKeyword ?? story.topic);
@@ -107,13 +123,13 @@ export async function generateDailyReadings(): Promise<Story[]> {
     types.map(async (type) => {
       const story = await generateOneReading(type, apiKey);
       const imageUrl = await fetchPixabayImage(story.imageKeyword ?? story.topic);
-      return { ...story, date: today, imageUrl };
+      return { ...story, date: targetDate, imageUrl };
     })
   );
 
   return results.map((result, i) => {
     if (result.status === "fulfilled") return result.value;
     console.error(`[generate] Failed to generate "${types[i]}":`, result.reason);
-    return { ...getSampleForType(types[i]), date: today };
+    return { ...getSampleForType(types[i]), date: targetDate };
   });
 }
