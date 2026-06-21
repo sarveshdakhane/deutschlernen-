@@ -12,6 +12,9 @@ export const metadata: Metadata = {
   metadataBase: new URL("http://www.dailydeutsch.org"),
   title: "Daily Deutsch",
   description: "Daily German reading and vocabulary practice for B1 learners.",
+  icons: {
+    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥨</text></svg>",
+  },
 };
 
 export default function RootLayout({
