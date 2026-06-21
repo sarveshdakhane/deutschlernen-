@@ -95,22 +95,25 @@ export async function generateDailyReadings(): Promise<Story[]> {
   if (!apiKey) {
     console.log("[generate] No OPENAI_API_KEY — using static dev stories (no API call made)");
     const devStories = types.map((t) => ({ ...getSampleForType(t), date: today }));
-    for (const story of devStories) {
-      story.imageUrl = await fetchPixabayImage(story.topic);
-    }
+    await Promise.all(
+      devStories.map(async (story) => {
+        story.imageUrl = await fetchPixabayImage(story.imageKeyword ?? story.topic);
+      })
+    );
     return devStories;
   }
 
-  const readings: Story[] = [];
-  for (let i = 0; i < types.length; i++) {
-    try {
-      const story = await generateOneReading(types[i], apiKey);
+  const results = await Promise.allSettled(
+    types.map(async (type) => {
+      const story = await generateOneReading(type, apiKey);
       const imageUrl = await fetchPixabayImage(story.imageKeyword ?? story.topic);
-      readings.push({ ...story, date: today, imageUrl });
-    } catch (err) {
-      console.error(`[generate] Failed to generate "${types[i]}":`, err);
-      readings.push({ ...getSampleForType(types[i]), date: today });
-    }
-  }
-  return readings;
+      return { ...story, date: today, imageUrl };
+    })
+  );
+
+  return results.map((result, i) => {
+    if (result.status === "fulfilled") return result.value;
+    console.error(`[generate] Failed to generate "${types[i]}":`, result.reason);
+    return { ...getSampleForType(types[i]), date: today };
+  });
 }
