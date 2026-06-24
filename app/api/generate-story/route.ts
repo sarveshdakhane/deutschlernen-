@@ -16,6 +16,12 @@ const blobAvailable = () => {
   return hasStatic || hasStoreId || hasOidc;
 };
 
+// Returns auth header for fetching private blob content directly
+function blobAuthHeaders(): HeadersInit | undefined {
+  const token = process.env.BLOB_READ_WRITE_TOKEN ?? process.env.VERCEL_OIDC_TOKEN;
+  return token ? { Authorization: `Bearer ${token}` } : undefined;
+}
+
 async function readFromBlob(date: string): Promise<Story[] | null> {
   if (!blobAvailable()) {
     console.log(`[blob] readFromBlob(${date}) skipped — no credentials`);
@@ -26,9 +32,8 @@ async function readFromBlob(date: string): Promise<Story[] | null> {
     const { blobs } = await list({ prefix: `readings-${date}` });
     console.log(`[blob] found ${blobs.length} blob(s) for ${date}`);
     if (blobs.length === 0) return null;
-    const fetchUrl = blobs[0].downloadUrl ?? blobs[0].url;
-    console.log(`[blob] fetching blob downloadUrl: ${fetchUrl}`);
-    const res = await fetch(fetchUrl);
+    console.log(`[blob] fetching blob: ${blobs[0].url}`);
+    const res = await fetch(blobs[0].url, { headers: blobAuthHeaders() });
     console.log(`[blob] fetch status: ${res.status}`);
     if (!res.ok) return null;
     return res.json();
@@ -51,8 +56,8 @@ async function saveToBlob(date: string, readings: Story[]): Promise<void> {
     });
     console.log(`[blob] saved OK — url: ${result.url}`);
   } catch (err) {
+    // Log but don't throw — a save failure shouldn't break the response
     console.error(`[blob] saveToBlob(${date}) error:`, err);
-    throw err;
   }
 }
 
