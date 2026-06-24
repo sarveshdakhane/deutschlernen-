@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { after } from "next/server";
-import { list, put, del } from "@vercel/blob";
+import { list, put, del, get } from "@vercel/blob";
 import { generateDailyReadings } from "@/lib/claude";
 import { Story } from "@/lib/types";
 
@@ -16,27 +16,22 @@ const blobAvailable = () => {
   return hasStatic || hasStoreId || hasOidc;
 };
 
-// Returns auth header for fetching private blob content directly
-function blobAuthHeaders(): HeadersInit | undefined {
-  const token = process.env.BLOB_READ_WRITE_TOKEN ?? process.env.VERCEL_OIDC_TOKEN;
-  return token ? { Authorization: `Bearer ${token}` } : undefined;
-}
-
 async function readFromBlob(date: string): Promise<Story[] | null> {
   if (!blobAvailable()) {
     console.log(`[blob] readFromBlob(${date}) skipped — no credentials`);
     return null;
   }
   try {
-    console.log(`[blob] listing blobs with prefix readings-${date}`);
-    const { blobs } = await list({ prefix: `readings-${date}` });
-    console.log(`[blob] found ${blobs.length} blob(s) for ${date}`);
-    if (blobs.length === 0) return null;
-    console.log(`[blob] fetching blob: ${blobs[0].url}`);
-    const res = await fetch(blobs[0].url, { headers: blobAuthHeaders() });
-    console.log(`[blob] fetch status: ${res.status}`);
-    if (!res.ok) return null;
-    return res.json();
+    console.log(`[blob] get readings-${date}.json`);
+    const result = await get(`readings-${date}.json`, { access: "private" });
+    if (!result || result.statusCode !== 200 || !result.stream) {
+      console.log(`[blob] not found or empty for ${date}`);
+      return null;
+    }
+    const text = await new Response(result.stream).text();
+    const data = JSON.parse(text) as Story[];
+    console.log(`[blob] hit — ${data.length} stories for ${date}`);
+    return data;
   } catch (err) {
     console.error(`[blob] readFromBlob(${date}) error:`, err);
     return null;
@@ -54,9 +49,9 @@ async function saveToBlob(date: string, readings: Story[]): Promise<void> {
       access: "private",
       addRandomSuffix: false,
     });
-    console.log(`[blob] saved OK — url: ${result.url}`);
+    console.log(`[blob] saved OK — ${result.url}`);
   } catch (err) {
-    // Log but don't throw — a save failure shouldn't break the response
+    // Log but don't throw — a save failure should not break the response
     console.error(`[blob] saveToBlob(${date}) error:`, err);
   }
 }
