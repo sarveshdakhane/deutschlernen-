@@ -9,7 +9,13 @@ export const maxDuration = 60;
 // In-process guard so the prefetch after() only fires once per instance per day.
 const prefetchedDates = new Set<string>();
 
-const blobAvailable = () => !!process.env.BLOB_READ_WRITE_TOKEN;
+const blobAvailable = () => {
+  // Supports both static token (BLOB_READ_WRITE_TOKEN) and
+  // Vercel's OIDC auth (BLOB_STORE_ID + auto-injected VERCEL_OIDC_TOKEN)
+  const ok = !!process.env.BLOB_READ_WRITE_TOKEN || !!process.env.BLOB_STORE_ID;
+  if (!ok) console.warn("[blob] No blob credentials found — blob storage disabled");
+  return ok;
+};
 
 async function readFromBlob(date: string): Promise<Story[] | null> {
   if (!blobAvailable()) return null;
