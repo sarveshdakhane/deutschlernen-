@@ -26,8 +26,9 @@ async function readFromBlob(date: string): Promise<Story[] | null> {
     const { blobs } = await list({ prefix: `readings-${date}` });
     console.log(`[blob] found ${blobs.length} blob(s) for ${date}`);
     if (blobs.length === 0) return null;
-    console.log(`[blob] fetching blob url: ${blobs[0].url}`);
-    const res = await fetch(blobs[0].url);
+    const fetchUrl = blobs[0].downloadUrl ?? blobs[0].url;
+    console.log(`[blob] fetching blob downloadUrl: ${fetchUrl}`);
+    const res = await fetch(fetchUrl);
     console.log(`[blob] fetch status: ${res.status}`);
     if (!res.ok) return null;
     return res.json();
@@ -45,7 +46,7 @@ async function saveToBlob(date: string, readings: Story[]): Promise<void> {
   try {
     console.log(`[blob] saving readings-${date}.json ...`);
     const result = await put(`readings-${date}.json`, JSON.stringify(readings), {
-      access: "public",
+      access: "private",
       addRandomSuffix: false,
     });
     console.log(`[blob] saved OK — url: ${result.url}`);

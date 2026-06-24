@@ -11,7 +11,7 @@ const TYPE_CONFIG: Record<ReadingType, { label: string; icon: string; bg: string
   speaking: { label: "A2 Sprechen", icon: "🗣️", bg: "bg-orange-50", text: "text-orange-700" },
 };
 
-type ArchiveEntry = { date: string; url: string };
+type ArchiveEntry = { date: string };
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
@@ -105,7 +105,7 @@ export default function ArchivePage() {
     if (!selectedEntry) return;
     setReadingsLoading(true);
     setReadings([]);
-    fetch(selectedEntry.url)
+    fetch(`/api/readings/${selectedEntry.date}`)
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d)) setReadings(d as Story[]); })
       .catch(() => {})
