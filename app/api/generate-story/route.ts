@@ -6,63 +6,79 @@ import { Story } from "@/lib/types";
 
 export const maxDuration = 60;
 
-// In-process guard so the prefetch after() only fires once per instance per day.
 const prefetchedDates = new Set<string>();
 
 const blobAvailable = () => {
-  const ok =
-    !!process.env.BLOB_READ_WRITE_TOKEN ||   // static token
-    !!process.env.BLOB_STORE_ID ||            // OIDC via store ID
-    !!process.env.VERCEL_OIDC_TOKEN;          // OIDC token directly
-  if (!ok) console.warn("[blob] No blob credentials found — blob storage disabled");
-  return ok;
+  const hasStatic = !!process.env.BLOB_READ_WRITE_TOKEN;
+  const hasStoreId = !!process.env.BLOB_STORE_ID;
+  const hasOidc = !!process.env.VERCEL_OIDC_TOKEN;
+  console.log(`[blob] credentials — BLOB_READ_WRITE_TOKEN:${hasStatic} BLOB_STORE_ID:${hasStoreId} VERCEL_OIDC_TOKEN:${hasOidc}`);
+  return hasStatic || hasStoreId || hasOidc;
 };
 
 async function readFromBlob(date: string): Promise<Story[] | null> {
-  if (!blobAvailable()) return null;
+  if (!blobAvailable()) {
+    console.log(`[blob] readFromBlob(${date}) skipped — no credentials`);
+    return null;
+  }
   try {
+    console.log(`[blob] listing blobs with prefix readings-${date}`);
     const { blobs } = await list({ prefix: `readings-${date}` });
+    console.log(`[blob] found ${blobs.length} blob(s) for ${date}`);
     if (blobs.length === 0) return null;
+    console.log(`[blob] fetching blob url: ${blobs[0].url}`);
     const res = await fetch(blobs[0].url);
+    console.log(`[blob] fetch status: ${res.status}`);
     if (!res.ok) return null;
     return res.json();
-  } catch {
+  } catch (err) {
+    console.error(`[blob] readFromBlob(${date}) error:`, err);
     return null;
   }
 }
 
 async function saveToBlob(date: string, readings: Story[]): Promise<void> {
-  if (!blobAvailable()) return;
-  await put(`readings-${date}.json`, JSON.stringify(readings), {
-    access: "public",
-    addRandomSuffix: false,
-  });
+  if (!blobAvailable()) {
+    console.log(`[blob] saveToBlob(${date}) skipped — no credentials`);
+    return;
+  }
+  try {
+    console.log(`[blob] saving readings-${date}.json ...`);
+    const result = await put(`readings-${date}.json`, JSON.stringify(readings), {
+      access: "public",
+      addRandomSuffix: false,
+    });
+    console.log(`[blob] saved OK — url: ${result.url}`);
+  } catch (err) {
+    console.error(`[blob] saveToBlob(${date}) error:`, err);
+    throw err;
+  }
 }
 
-// Deletes oldest blobs when total storage exceeds 400MB to stay within free tier.
 async function cleanupIfNeeded(): Promise<void> {
   if (!blobAvailable()) return;
-  const { blobs } = await list({ prefix: "readings-" });
-  const totalBytes = blobs.reduce((sum, b) => sum + b.size, 0);
-  const thresholdBytes = 400 * 1024 * 1024; // 400MB
+  try {
+    const { blobs } = await list({ prefix: "readings-" });
+    const totalBytes = blobs.reduce((sum, b) => sum + b.size, 0);
+    const thresholdBytes = 400 * 1024 * 1024;
+    console.log(`[cleanup] total blob storage: ${(totalBytes / 1024 / 1024).toFixed(2)}MB`);
+    if (totalBytes <= thresholdBytes) return;
 
-  if (totalBytes <= thresholdBytes) return;
-
-  // Sort oldest first, delete until back under 300MB
-  const sorted = [...blobs].sort((a, b) => a.pathname.localeCompare(b.pathname));
-  const targetBytes = 300 * 1024 * 1024;
-  const toDelete: string[] = [];
-  let remaining = totalBytes;
-
-  for (const blob of sorted) {
-    if (remaining <= targetBytes) break;
-    toDelete.push(blob.url);
-    remaining -= blob.size;
-  }
-
-  if (toDelete.length > 0) {
-    await del(toDelete);
-    console.log(`[cleanup] Deleted ${toDelete.length} old blob(s), freed ${((totalBytes - remaining) / 1024 / 1024).toFixed(1)}MB`);
+    const sorted = [...blobs].sort((a, b) => a.pathname.localeCompare(b.pathname));
+    const targetBytes = 300 * 1024 * 1024;
+    const toDelete: string[] = [];
+    let remaining = totalBytes;
+    for (const blob of sorted) {
+      if (remaining <= targetBytes) break;
+      toDelete.push(blob.url);
+      remaining -= blob.size;
+    }
+    if (toDelete.length > 0) {
+      await del(toDelete);
+      console.log(`[cleanup] deleted ${toDelete.length} blob(s)`);
+    }
+  } catch (err) {
+    console.error("[cleanup] error:", err);
   }
 }
 
@@ -82,43 +98,43 @@ function secondsUntilMidnight() {
 
 export async function GET(request: Request) {
   const force = new URL(request.url).searchParams.get("force") === "true";
+  const today = new Date().toISOString().split("T")[0];
+  console.log(`[route] GET /api/generate-story — force:${force} date:${today}`);
 
   try {
-    const today = new Date().toISOString().split("T")[0];
-
-    // 1. Try blob first (shared across all regions and instances)
     let readings: Story[] | null = force ? null : await readFromBlob(today);
 
-    // 2. Blob miss — generate and persist so every subsequent request hits blob
     if (!readings) {
+      console.log(`[route] blob miss — generating readings for ${today}`);
       readings = await generateDailyReadings(today);
-      try {
-        await saveToBlob(today, readings);
-      } catch {
-        // No BLOB_READ_WRITE_TOKEN in local dev — safe to ignore
-      }
+      console.log(`[route] generation done — ${readings.length} stories`);
+      await saveToBlob(today, readings);
+    } else {
+      console.log(`[route] blob hit — serving cached readings for ${today}`);
     }
 
-    // 3. After the response is sent, pre-generate tomorrow if not already done
     if (!force && !prefetchedDates.has(today)) {
       prefetchedDates.add(today);
       after(async () => {
         const tomorrow = getTomorrowDate();
+        console.log(`[prefetch] checking tomorrow ${tomorrow}`);
         try {
           const existing = await readFromBlob(tomorrow);
           if (!existing) {
+            console.log(`[prefetch] generating tomorrow ${tomorrow}`);
             const tomorrowReadings = await generateDailyReadings(tomorrow);
             await saveToBlob(tomorrow, tomorrowReadings);
-            console.log(`[prefetch] Pre-generated tomorrow's readings: ${tomorrow}`);
+            console.log(`[prefetch] done for ${tomorrow}`);
+          } else {
+            console.log(`[prefetch] tomorrow ${tomorrow} already cached`);
           }
           await cleanupIfNeeded();
         } catch (err) {
-          console.error("[prefetch] Failed:", err);
+          console.error("[prefetch] error:", err);
         }
       });
     }
 
-    // 4. CDN edge cache as a fast layer in front of blob
     const ttl = secondsUntilMidnight();
     return NextResponse.json(readings, {
       headers: force
@@ -126,6 +142,7 @@ export async function GET(request: Request) {
         : { "Cache-Control": `public, s-maxage=${ttl}, stale-while-revalidate=30` },
     });
   } catch (error) {
+    console.error("[route] fatal error:", error);
     const message = error instanceof Error ? error.message : "Failed to generate readings";
     return NextResponse.json({ error: message }, { status: 500 });
   }
