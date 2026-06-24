@@ -10,9 +10,10 @@ export const maxDuration = 60;
 const prefetchedDates = new Set<string>();
 
 const blobAvailable = () => {
-  // Supports both static token (BLOB_READ_WRITE_TOKEN) and
-  // Vercel's OIDC auth (BLOB_STORE_ID + auto-injected VERCEL_OIDC_TOKEN)
-  const ok = !!process.env.BLOB_READ_WRITE_TOKEN || !!process.env.BLOB_STORE_ID;
+  const ok =
+    !!process.env.BLOB_READ_WRITE_TOKEN ||   // static token
+    !!process.env.BLOB_STORE_ID ||            // OIDC via store ID
+    !!process.env.VERCEL_OIDC_TOKEN;          // OIDC token directly
   if (!ok) console.warn("[blob] No blob credentials found — blob storage disabled");
   return ok;
 };

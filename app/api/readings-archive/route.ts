@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { list } from "@vercel/blob";
 
 export async function GET() {
-  if (!process.env.BLOB_READ_WRITE_TOKEN && !process.env.BLOB_STORE_ID) return NextResponse.json([]);
+  const hasCreds = !!process.env.BLOB_READ_WRITE_TOKEN || !!process.env.BLOB_STORE_ID || !!process.env.VERCEL_OIDC_TOKEN;
+  if (!hasCreds) return NextResponse.json([]);
   try {
     const { blobs } = await list({ prefix: "readings-" });
     const today = new Date().toISOString().split("T")[0];
