@@ -46,7 +46,14 @@ async function persistImages(readings: Story[], date: string): Promise<Story[]> 
     readings.map(async (story) => {
       if (!story.imageUrl || !story.imageUrl.startsWith("http")) return story;
       try {
-        const res = await fetch(story.imageUrl);
+        // Pixabay webformatURL requires a browser-like User-Agent to download
+        const res = await fetch(story.imageUrl, {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (compatible; DailyDeutsch/1.0; +https://www.dailydeutsch.org)",
+          },
+        });
+        console.log(`[image] pixabay fetch for ${story.slug}: ${res.status} ${res.headers.get("content-type")}`);
         if (!res.ok) {
           console.warn(`[image] fetch failed for ${story.slug}: ${res.status}`);
           return story;
@@ -119,13 +126,6 @@ function getTomorrowDate() {
   return d.toISOString().split("T")[0];
 }
 
-function secondsUntilMidnight() {
-  const now = new Date();
-  const midnight = new Date(now);
-  midnight.setDate(midnight.getDate() + 1);
-  midnight.setHours(0, 0, 0, 0);
-  return Math.floor((midnight.getTime() - now.getTime()) / 1000);
-}
 
 export async function GET(request: Request) {
   const force = new URL(request.url).searchParams.get("force") === "true";
@@ -168,11 +168,10 @@ export async function GET(request: Request) {
       });
     }
 
-    const ttl = secondsUntilMidnight();
     return NextResponse.json(readings, {
       headers: force
         ? { "Cache-Control": "no-store" }
-        : { "Cache-Control": `public, s-maxage=${ttl}, stale-while-revalidate=30` },
+        : { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" },
     });
   } catch (error) {
     console.error("[route] fatal error:", error);
