@@ -44,16 +44,24 @@ function assignProxyImageUrls(readings: Story[], date: string): Story[] {
   });
 }
 
-async function saveToBlob(date: string, readings: Story[]): Promise<void> {
-  if (!blobAvailable()) return;
+async function saveToBlob(date: string, readings: Story[]): Promise<string | null> {
+  if (!blobAvailable()) {
+    console.warn(`[blob] saveToBlob(${date}) skipped — no credentials`);
+    return "no credentials";
+  }
   try {
-    const result = await put(`readings-${date}.json`, JSON.stringify(readings), {
+    const body = JSON.stringify(readings);
+    console.log(`[blob] putting readings-${date}.json (${body.length} bytes) access:private`);
+    const result = await put(`readings-${date}.json`, body, {
       access: "private",
       addRandomSuffix: false,
     });
-    console.log(`[blob] saved readings OK — ${result.url}`);
+    console.log(`[blob] saved OK — ${result.url}`);
+    return null; // null = success
   } catch (err) {
-    console.error(`[blob] saveToBlob(${date}) error:`, err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[blob] saveToBlob(${date}) FAILED: ${msg}`);
+    return msg; // return error message
   }
 }
 
@@ -97,12 +105,13 @@ export async function GET(request: Request) {
   try {
     let readings: Story[] | null = force ? null : await readFromBlob(today);
 
+    let saveError: string | null = null;
     if (!readings) {
       console.log(`[route] generating readings for ${today}`);
       readings = await generateDailyReadings(today);
       readings = assignProxyImageUrls(readings, today);
-      await saveToBlob(today, readings);
-      console.log(`[route] generation + save done — ${readings.length} stories`);
+      saveError = await saveToBlob(today, readings);
+      console.log(`[route] generation done — ${readings.length} stories, saveError=${saveError}`);
     }
 
     if (!force && !prefetchedDates.has(today)) {
@@ -115,7 +124,8 @@ export async function GET(request: Request) {
             console.log(`[prefetch] generating tomorrow ${tomorrow}`);
             let tomorrowReadings = await generateDailyReadings(tomorrow);
             tomorrowReadings = assignProxyImageUrls(tomorrowReadings, tomorrow);
-            await saveToBlob(tomorrow, tomorrowReadings);
+            const err = await saveToBlob(tomorrow, tomorrowReadings);
+            if (err) console.error(`[prefetch] save failed for ${tomorrow}: ${err}`);
             console.log(`[prefetch] done for ${tomorrow}`);
           }
           await cleanupIfNeeded();
@@ -125,10 +135,15 @@ export async function GET(request: Request) {
       });
     }
 
+    // In force mode, wrap response to expose save status for debugging
+    if (force) {
+      return NextResponse.json(
+        { saveError, stories: readings },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
     return NextResponse.json(readings, {
-      headers: force
-        ? { "Cache-Control": "no-store" }
-        : { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" },
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" },
     });
   } catch (error) {
     console.error("[route] fatal error:", error);
