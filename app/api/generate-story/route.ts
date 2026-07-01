@@ -55,6 +55,7 @@ async function saveToBlob(date: string, readings: Story[]): Promise<string | nul
     const result = await put(`readings-${date}.json`, body, {
       access: "private",
       addRandomSuffix: false,
+      allowOverwrite: true,
     });
     console.log(`[blob] saved OK — ${result.url}`);
     return null; // null = success
