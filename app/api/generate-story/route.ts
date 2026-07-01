@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { after } from "next/server";
-import { list, put, del, get } from "@vercel/blob";
+import { put, del, get, list } from "@vercel/blob";
 import { generateDailyReadings } from "@/lib/claude";
 import { Story } from "@/lib/types";
 
@@ -38,6 +38,37 @@ async function readFromBlob(date: string): Promise<Story[] | null> {
   }
 }
 
+// Downloads each story's Pixabay imageUrl into private blob storage and
+// replaces the URL with our own proxy path so images never expire.
+async function persistImages(readings: Story[], date: string): Promise<Story[]> {
+  if (!blobAvailable()) return readings;
+  return Promise.all(
+    readings.map(async (story) => {
+      if (!story.imageUrl || !story.imageUrl.startsWith("http")) return story;
+      try {
+        const res = await fetch(story.imageUrl);
+        if (!res.ok) {
+          console.warn(`[image] fetch failed for ${story.slug}: ${res.status}`);
+          return story;
+        }
+        const buffer = await res.arrayBuffer();
+        const contentType = res.headers.get("content-type") ?? "image/jpeg";
+        const filename = `image-${date}-${story.slug}.jpg`;
+        await put(filename, buffer, {
+          access: "private",
+          addRandomSuffix: false,
+          contentType,
+        });
+        console.log(`[image] saved ${filename}`);
+        return { ...story, imageUrl: `/api/image/${date}/${story.slug}` };
+      } catch (err) {
+        console.warn(`[image] could not cache image for ${story.slug}:`, err);
+        return story; // keep original URL as fallback
+      }
+    })
+  );
+}
+
 async function saveToBlob(date: string, readings: Story[]): Promise<void> {
   if (!blobAvailable()) {
     console.log(`[blob] saveToBlob(${date}) skipped — no credentials`);
@@ -51,7 +82,6 @@ async function saveToBlob(date: string, readings: Story[]): Promise<void> {
     });
     console.log(`[blob] saved OK — ${result.url}`);
   } catch (err) {
-    // Log but don't throw — a save failure should not break the response
     console.error(`[blob] saveToBlob(${date}) error:`, err);
   }
 }
@@ -109,6 +139,7 @@ export async function GET(request: Request) {
       console.log(`[route] blob miss — generating readings for ${today}`);
       readings = await generateDailyReadings(today);
       console.log(`[route] generation done — ${readings.length} stories`);
+      readings = await persistImages(readings, today);
       await saveToBlob(today, readings);
     } else {
       console.log(`[route] blob hit — serving cached readings for ${today}`);
@@ -123,7 +154,8 @@ export async function GET(request: Request) {
           const existing = await readFromBlob(tomorrow);
           if (!existing) {
             console.log(`[prefetch] generating tomorrow ${tomorrow}`);
-            const tomorrowReadings = await generateDailyReadings(tomorrow);
+            let tomorrowReadings = await generateDailyReadings(tomorrow);
+            tomorrowReadings = await persistImages(tomorrowReadings, tomorrow);
             await saveToBlob(tomorrow, tomorrowReadings);
             console.log(`[prefetch] done for ${tomorrow}`);
           } else {
