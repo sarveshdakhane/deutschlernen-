@@ -17,17 +17,10 @@ const blobAvailable = () => {
 };
 
 async function readFromBlob(date: string): Promise<Story[] | null> {
-  if (!blobAvailable()) {
-    console.log(`[blob] readFromBlob(${date}) skipped — no credentials`);
-    return null;
-  }
+  if (!blobAvailable()) return null;
   try {
-    console.log(`[blob] get readings-${date}.json`);
     const result = await get(`readings-${date}.json`, { access: "private" });
-    if (!result || result.statusCode !== 200 || !result.stream) {
-      console.log(`[blob] not found or empty for ${date}`);
-      return null;
-    }
+    if (!result || result.statusCode !== 200 || !result.stream) return null;
     const text = await new Response(result.stream).text();
     const data = JSON.parse(text) as Story[];
     console.log(`[blob] hit — ${data.length} stories for ${date}`);
@@ -38,56 +31,27 @@ async function readFromBlob(date: string): Promise<Story[] | null> {
   }
 }
 
-// Downloads each story's Pixabay imageUrl into private blob storage and
-// replaces the URL with our own proxy path so images never expire.
-async function persistImages(readings: Story[], date: string): Promise<Story[]> {
-  if (!blobAvailable()) return readings;
-  return Promise.all(
-    readings.map(async (story) => {
-      if (!story.imageUrl || !story.imageUrl.startsWith("http")) return story;
-      try {
-        // Pixabay webformatURL requires a browser-like User-Agent to download
-        const res = await fetch(story.imageUrl, {
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (compatible; DailyDeutsch/1.0; +https://www.dailydeutsch.org)",
-          },
-        });
-        console.log(`[image] pixabay fetch for ${story.slug}: ${res.status} ${res.headers.get("content-type")}`);
-        if (!res.ok) {
-          console.warn(`[image] fetch failed for ${story.slug}: ${res.status}`);
-          return story;
-        }
-        const buffer = await res.arrayBuffer();
-        const contentType = res.headers.get("content-type") ?? "image/jpeg";
-        const filename = `image-${date}-${story.slug}.jpg`;
-        await put(filename, buffer, {
-          access: "private",
-          addRandomSuffix: false,
-          contentType,
-        });
-        console.log(`[image] saved ${filename}`);
-        return { ...story, imageUrl: `/api/image/${date}/${story.slug}` };
-      } catch (err) {
-        console.warn(`[image] could not cache image for ${story.slug}:`, err);
-        return story; // keep original URL as fallback
-      }
-    })
-  );
+// Instead of downloading images at generation time (Pixabay blocks server-side
+// hotlink fetches), we store the imageKeyword in the URL so the image proxy
+// can call the Pixabay API fresh on the first browser request and cache the
+// result in blob. No expiring URLs stored anywhere.
+function assignProxyImageUrls(readings: Story[], date: string): Story[] {
+  return readings.map((story) => {
+    const keyword = story.imageKeyword;
+    if (!keyword) return story;
+    const proxyUrl = `/api/image/${date}/${encodeURIComponent(story.slug)}?kw=${encodeURIComponent(keyword)}`;
+    return { ...story, imageUrl: proxyUrl };
+  });
 }
 
 async function saveToBlob(date: string, readings: Story[]): Promise<void> {
-  if (!blobAvailable()) {
-    console.log(`[blob] saveToBlob(${date}) skipped — no credentials`);
-    return;
-  }
+  if (!blobAvailable()) return;
   try {
-    console.log(`[blob] saving readings-${date}.json ...`);
     const result = await put(`readings-${date}.json`, JSON.stringify(readings), {
       access: "private",
       addRandomSuffix: false,
     });
-    console.log(`[blob] saved OK — ${result.url}`);
+    console.log(`[blob] saved readings OK — ${result.url}`);
   } catch (err) {
     console.error(`[blob] saveToBlob(${date}) error:`, err);
   }
@@ -99,7 +63,6 @@ async function cleanupIfNeeded(): Promise<void> {
     const { blobs } = await list({ prefix: "readings-" });
     const totalBytes = blobs.reduce((sum, b) => sum + b.size, 0);
     const thresholdBytes = 400 * 1024 * 1024;
-    console.log(`[cleanup] total blob storage: ${(totalBytes / 1024 / 1024).toFixed(2)}MB`);
     if (totalBytes <= thresholdBytes) return;
 
     const sorted = [...blobs].sort((a, b) => a.pathname.localeCompare(b.pathname));
@@ -126,7 +89,6 @@ function getTomorrowDate() {
   return d.toISOString().split("T")[0];
 }
 
-
 export async function GET(request: Request) {
   const force = new URL(request.url).searchParams.get("force") === "true";
   const today = new Date().toISOString().split("T")[0];
@@ -136,30 +98,25 @@ export async function GET(request: Request) {
     let readings: Story[] | null = force ? null : await readFromBlob(today);
 
     if (!readings) {
-      console.log(`[route] blob miss — generating readings for ${today}`);
+      console.log(`[route] generating readings for ${today}`);
       readings = await generateDailyReadings(today);
-      console.log(`[route] generation done — ${readings.length} stories`);
-      readings = await persistImages(readings, today);
+      readings = assignProxyImageUrls(readings, today);
       await saveToBlob(today, readings);
-    } else {
-      console.log(`[route] blob hit — serving cached readings for ${today}`);
+      console.log(`[route] generation + save done — ${readings.length} stories`);
     }
 
     if (!force && !prefetchedDates.has(today)) {
       prefetchedDates.add(today);
       after(async () => {
         const tomorrow = getTomorrowDate();
-        console.log(`[prefetch] checking tomorrow ${tomorrow}`);
         try {
           const existing = await readFromBlob(tomorrow);
           if (!existing) {
             console.log(`[prefetch] generating tomorrow ${tomorrow}`);
             let tomorrowReadings = await generateDailyReadings(tomorrow);
-            tomorrowReadings = await persistImages(tomorrowReadings, tomorrow);
+            tomorrowReadings = assignProxyImageUrls(tomorrowReadings, tomorrow);
             await saveToBlob(tomorrow, tomorrowReadings);
             console.log(`[prefetch] done for ${tomorrow}`);
-          } else {
-            console.log(`[prefetch] tomorrow ${tomorrow} already cached`);
           }
           await cleanupIfNeeded();
         } catch (err) {
