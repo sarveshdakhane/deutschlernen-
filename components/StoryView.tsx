@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useRef } from "react";
 import { Story, ReadingType } from "@/lib/types";
-import WordPopup from "./WordPopup";
 import QuizSection from "./QuizSection";
 
 const TYPE_CONFIG: Record<ReadingType, { label: string; icon: string; bg: string; text: string }> = {
@@ -12,69 +11,16 @@ const TYPE_CONFIG: Record<ReadingType, { label: string; icon: string; bg: string
   speaking: { label: "A2 Sprechen", icon: "🗣️", bg: "bg-orange-50", text: "text-orange-700" },
 };
 
-type PopupState = {
-  word: string;
-  sentence: string;
-  x: number;
-  y: number;
-};
-
-function cleanWord(token: string): string {
-  return token.replace(/^[^a-zA-ZäöüÄÖÜß]+|[^a-zA-ZäöüÄÖÜß]+$/g, "");
-}
-
-function extractSentence(paragraph: string, word: string): string {
-  const sentences = paragraph.split(/(?<=[.!?])\s+/);
-  return sentences.find((s) => s.includes(word)) ?? paragraph.slice(0, 150);
-}
-
-type ParagraphProps = {
-  text: string;
-  onWordClick: (word: string, sentence: string, x: number, y: number) => void;
-};
-
-function ClickableParagraph({ text, onWordClick }: ParagraphProps) {
-  const tokens = text.split(/(\s+)/);
-  return (
-    <p className="text-[17px] sm:text-[18px] leading-[1.85] sm:leading-[1.9] text-gray-800 text-left sm:text-justify hyphens-none" lang="de">
-      {tokens.map((token, i) => {
-        if (/^\s+$/.test(token)) return token;
-        const word = cleanWord(token);
-        if (!word) return token;
-        return (
-          <span
-            key={i}
-            onClick={(e) => {
-              const rect = (e.target as HTMLElement).getBoundingClientRect();
-              onWordClick(word, extractSentence(text, word), rect.left + rect.width / 2, rect.bottom);
-            }}
-            className="cursor-pointer rounded px-0.5 -mx-0.5 active:bg-yellow-100 hover:bg-yellow-100 transition-colors"
-          >
-            {token}
-          </span>
-        );
-      })}
-    </p>
-  );
-}
-
 type Props = {
   story: Story;
   onBack?: () => void;
 };
 
 export default function StoryView({ story, onBack }: Props) {
-  const [popup, setPopup] = useState<PopupState | null>(null);
   const [swipeX, setSwipeX] = useState(0);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const edgeSwipe = useRef(false);
-
-  const handleWordClick = useCallback((word: string, sentence: string, x: number, y: number) => {
-    setPopup({ word, sentence, x, y });
-  }, []);
-
-  const closePopup = useCallback(() => setPopup(null), []);
 
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -147,7 +93,6 @@ export default function StoryView({ story, onBack }: Props) {
           <span className="text-xs text-gray-500">{story.topic}</span>
         </div>
         <h1 className="text-xl sm:text-3xl font-bold text-gray-900 leading-snug">{story.title}</h1>
-        <p className="text-xs text-gray-400 mt-2">Tap any word to see its English translation.</p>
       </div>
 
       {/* Cover image */}
@@ -164,7 +109,13 @@ export default function StoryView({ story, onBack }: Props) {
       {/* Story text */}
       <section className="bg-white border border-gray-200 rounded-2xl px-5 py-7 sm:px-14 sm:py-12 mb-4 sm:mb-6 space-y-5 sm:space-y-6">
         {paragraphs.map((para, i) => (
-          <ClickableParagraph key={i} text={para} onWordClick={handleWordClick} />
+          <p
+            key={i}
+            className="text-[17px] sm:text-[18px] leading-[1.85] sm:leading-[1.9] text-gray-800 text-left sm:text-justify hyphens-none"
+            lang="de"
+          >
+            {para}
+          </p>
         ))}
       </section>
 
@@ -184,15 +135,6 @@ export default function StoryView({ story, onBack }: Props) {
           Print
         </button>
       </div>
-
-      {popup && (
-        <WordPopup
-          word={popup.word}
-          sentence={popup.sentence}
-          position={{ x: popup.x, y: popup.y }}
-          onClose={closePopup}
-        />
-      )}
     </article>
   );
 }
