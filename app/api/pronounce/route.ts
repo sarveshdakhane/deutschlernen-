@@ -5,6 +5,11 @@ export const maxDuration = 30;
 const TATOEBA_SEARCH = "https://tatoeba.org/en/api_v0/search";
 const MAX_PAGES_TO_SCAN = 20;
 const MAX_CLIPS = 5;
+// Tatoeba's per-request latency varies a lot (and some common words have almost
+// no audio-bearing sentences, requiring many page scans), so the scan is bounded
+// by wall-clock time rather than a fixed page count — that's the only way to
+// reliably stay under `maxDuration` regardless of how slow/sparse a given word is.
+const SCAN_TIME_BUDGET_MS = 20_000;
 
 type TatoebaAudio = { download_url: string };
 type TatoebaTranslation = { text: string; lang: string };
@@ -77,6 +82,7 @@ export async function GET(request: Request) {
           emit(clip);
         }
 
+        const scanStart = Date.now();
         const first = await searchPage(word, 1);
         (first.results ?? []).forEach(addSentence);
         const pageCount = Math.min(first.paging?.Sentences?.pageCount ?? 1, MAX_PAGES_TO_SCAN);
@@ -86,7 +92,10 @@ export async function GET(request: Request) {
         // is just as fast as batching and avoids tripping their rate limiter.
         for (
           let page = 2;
-          page <= pageCount && clips.length < MAX_CLIPS && !request.signal.aborted;
+          page <= pageCount &&
+          clips.length < MAX_CLIPS &&
+          !request.signal.aborted &&
+          Date.now() - scanStart < SCAN_TIME_BUDGET_MS;
           page++
         ) {
           const data = await searchPage(word, page).catch(() => null);
