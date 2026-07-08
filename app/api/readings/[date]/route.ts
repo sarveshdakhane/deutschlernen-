@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { get, put } from "@vercel/blob";
-import { ensureAudioCached } from "@/lib/audioCache.server";
+import { ensureAudioCached, voiceForReadingType } from "@/lib/audioCache.server";
 import { Story } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -20,15 +20,20 @@ export async function GET(_: Request, { params }: { params: Promise<{ date: stri
     const text = await new Response(result.stream).text();
     let data = JSON.parse(text) as Story[];
 
-    // Backfill audioUrl/audioTimingsUrl on readings cached before those fields
-    // shipped — no new OpenAI text call needed, just re-derive the proxy URLs.
-    if (Array.isArray(data) && data.some((r) => !r.audioUrl || !r.audioTimingsUrl)) {
+    // Backfill audioUrl/audioTimingsUrl (and voice-aware URLs) on readings cached
+    // before those fields shipped — no new OpenAI text call needed, just re-derive
+    // the proxy URLs from the already-stored text.
+    if (
+      Array.isArray(data) &&
+      data.some((r) => !r.audioUrl || !r.audioTimingsUrl || !r.audioUrl.includes("voice="))
+    ) {
       data = data.map((story) => {
         const slug = encodeURIComponent(story.slug);
+        const voice = voiceForReadingType(story.readingType);
         return {
           ...story,
-          audioUrl: `/api/audio/${date}/${slug}?t=${encodeURIComponent(story.story)}`,
-          audioTimingsUrl: `/api/audio-timings/${date}/${slug}`,
+          audioUrl: `/api/audio/${date}/${slug}?t=${encodeURIComponent(story.story)}&voice=${voice}`,
+          audioTimingsUrl: `/api/audio-timings/${date}/${slug}?voice=${voice}`,
         };
       });
       try {
@@ -43,7 +48,9 @@ export async function GET(_: Request, { params }: { params: Promise<{ date: stri
     }
 
     await Promise.allSettled(
-      data.map((story) => ensureAudioCached(date, story.slug, story.story))
+      data.map((story) =>
+        ensureAudioCached(date, story.slug, story.story, voiceForReadingType(story.readingType))
+      )
     );
 
     return NextResponse.json(data);

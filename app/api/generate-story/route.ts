@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { after } from "next/server";
 import { put, del, get, list } from "@vercel/blob";
 import { generateDailyReadings } from "@/lib/claude";
-import { ensureAudioCached } from "@/lib/audioCache.server";
+import { ensureAudioCached, voiceForReadingType } from "@/lib/audioCache.server";
 import { Story } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -39,26 +39,32 @@ function assignProxyImageUrls(readings: Story[], date: string): Story[] {
 // Stores the reading text in the proxy URL so the audio route can synthesize
 // speech on first request and cache the mp3 in blob. Also points to the
 // word-timings route used for karaoke-style highlighting during playback.
+// Voice is chosen per reading type so the daily edition doesn't sound uniform.
 function assignProxyAudioUrls(readings: Story[], date: string): Story[] {
   return readings.map((story) => {
     const slug = encodeURIComponent(story.slug);
+    const voice = voiceForReadingType(story.readingType);
     return {
       ...story,
-      audioUrl: `/api/audio/${date}/${slug}?t=${encodeURIComponent(story.story)}`,
-      audioTimingsUrl: `/api/audio-timings/${date}/${slug}`,
+      audioUrl: `/api/audio/${date}/${slug}?t=${encodeURIComponent(story.story)}&voice=${voice}`,
+      audioTimingsUrl: `/api/audio-timings/${date}/${slug}?voice=${voice}`,
     };
   });
 }
 
 function needsAudioBackfill(readings: Story[]): boolean {
-  return readings.some((r) => !r.audioUrl || !r.audioTimingsUrl);
+  return readings.some(
+    (r) => !r.audioUrl || !r.audioTimingsUrl || !r.audioUrl.includes("voice=")
+  );
 }
 
 // Synthesizes and caches audio for every reading up front, so playback is
 // instant later instead of waiting on TTS at click time.
 async function pregenerateAudio(readings: Story[], date: string): Promise<void> {
   await Promise.allSettled(
-    readings.map((story) => ensureAudioCached(date, story.slug, story.story))
+    readings.map((story) =>
+      ensureAudioCached(date, story.slug, story.story, voiceForReadingType(story.readingType))
+    )
   );
 }
 

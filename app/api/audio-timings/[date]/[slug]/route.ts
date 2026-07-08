@@ -5,22 +5,24 @@ import {
   getCachedTimings,
   transcribeWordTimings,
   cacheTimings,
+  DEFAULT_VOICE,
 } from "@/lib/audioCache.server";
 
 export const maxDuration = 30;
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ date: string; slug: string }> }
 ) {
   const { date, slug } = await params;
+  const voice = new URL(request.url).searchParams.get("voice") ?? DEFAULT_VOICE;
 
   if (!date.match(/^\d{4}-\d{2}-\d{2}$/) || !slug) {
     return new Response(null, { status: 400 });
   }
 
   const decodedSlug = decodeURIComponent(slug);
-  const timingsFile = timingsFilename(date, decodedSlug);
+  const timingsFile = timingsFilename(date, decodedSlug, voice);
 
   const cached = await getCachedTimings(timingsFile);
   if (cached) {
@@ -31,7 +33,7 @@ export async function GET(
 
   // Fallback: audio should already be pre-generated — transcribe it now if the
   // timings step hasn't caught up yet.
-  const audioFile = audioFilename(date, decodedSlug);
+  const audioFile = audioFilename(date, decodedSlug, voice);
   const cachedAudio = await getCachedAudio(audioFile);
   if (!cachedAudio) {
     return new Response(null, { status: 404 });

@@ -1,21 +1,38 @@
 import { get, put } from "@vercel/blob";
 import OpenAI, { toFile } from "openai";
-import { WordTiming } from "./types";
+import { ReadingType, WordTiming } from "./types";
 
 // TTS input cap — daily readings are 300-480 words (~2-3k chars), well under this.
 const MAX_INPUT_CHARS = 4000;
+
+export const DEFAULT_VOICE = "alloy";
+
+// Gives each reading type a distinct voice so the daily edition doesn't sound
+// like the same narrator reading everything.
+const VOICE_BY_READING_TYPE: Record<ReadingType, string> = {
+  news: "echo",
+  dialogue: "verse",
+  story: "shimmer",
+  speaking: "coral",
+};
+
+export function voiceForReadingType(type: ReadingType): string {
+  return VOICE_BY_READING_TYPE[type] ?? DEFAULT_VOICE;
+}
 
 export const audioBlobAvailable = () =>
   !!process.env.BLOB_READ_WRITE_TOKEN ||
   !!process.env.BLOB_STORE_ID ||
   !!process.env.VERCEL_OIDC_TOKEN;
 
-export function audioFilename(date: string, slug: string): string {
-  return `audio-${date}-${slug}.mp3`;
+// Voice is part of the cache key so switching a reading type's voice
+// naturally invalidates old audio instead of requiring a manual purge.
+export function audioFilename(date: string, slug: string, voice: string): string {
+  return `audio-${date}-${slug}-${voice}.mp3`;
 }
 
-export function timingsFilename(date: string, slug: string): string {
-  return `audio-${date}-${slug}-timings.json`;
+export function timingsFilename(date: string, slug: string, voice: string): string {
+  return `audio-${date}-${slug}-${voice}-timings.json`;
 }
 
 export async function getCachedAudio(
@@ -54,14 +71,14 @@ export async function getCachedTimings(filename: string): Promise<WordTiming[] |
   return null;
 }
 
-export async function synthesizeAudio(text: string): Promise<ArrayBuffer | null> {
+export async function synthesizeAudio(text: string, voice: string = DEFAULT_VOICE): Promise<ArrayBuffer | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
   try {
     const client = new OpenAI({ apiKey });
     const speech = await client.audio.speech.create({
       model: "gpt-4o-mini-tts",
-      voice: "alloy",
+      voice,
       input: text.slice(0, MAX_INPUT_CHARS),
       response_format: "mp3",
     });
@@ -122,13 +139,18 @@ export async function cacheTimings(filename: string, timings: WordTiming[]): Pro
 
 // Pre-generates and caches audio + word timings for a reading if not already cached.
 // Safe to call speculatively — no-ops for whatever's already cached or when TTS is unavailable.
-export async function ensureAudioCached(date: string, slug: string, text: string): Promise<void> {
-  const audioFile = audioFilename(date, slug);
-  const timingsFile = timingsFilename(date, slug);
+export async function ensureAudioCached(
+  date: string,
+  slug: string,
+  text: string,
+  voice: string = DEFAULT_VOICE
+): Promise<void> {
+  const audioFile = audioFilename(date, slug, voice);
+  const timingsFile = timingsFilename(date, slug, voice);
 
   let buffer = await getCachedAudioBuffer(audioFile);
   if (!buffer) {
-    buffer = await synthesizeAudio(text);
+    buffer = await synthesizeAudio(text, voice);
     if (!buffer) return;
     await cacheAudio(audioFile, buffer);
   }
