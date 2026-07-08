@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { after } from "next/server";
 import { put, del, get, list } from "@vercel/blob";
 import { generateDailyReadings } from "@/lib/claude";
+import { ensureAudioCached } from "@/lib/audioCache.server";
 import { Story } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -36,12 +37,29 @@ function assignProxyImageUrls(readings: Story[], date: string): Story[] {
 }
 
 // Stores the reading text in the proxy URL so the audio route can synthesize
-// speech on first request and cache the mp3 in blob.
+// speech on first request and cache the mp3 in blob. Also points to the
+// word-timings route used for karaoke-style highlighting during playback.
 function assignProxyAudioUrls(readings: Story[], date: string): Story[] {
   return readings.map((story) => {
-    const proxyUrl = `/api/audio/${date}/${encodeURIComponent(story.slug)}?t=${encodeURIComponent(story.story)}`;
-    return { ...story, audioUrl: proxyUrl };
+    const slug = encodeURIComponent(story.slug);
+    return {
+      ...story,
+      audioUrl: `/api/audio/${date}/${slug}?t=${encodeURIComponent(story.story)}`,
+      audioTimingsUrl: `/api/audio-timings/${date}/${slug}`,
+    };
   });
+}
+
+function needsAudioBackfill(readings: Story[]): boolean {
+  return readings.some((r) => !r.audioUrl || !r.audioTimingsUrl);
+}
+
+// Synthesizes and caches audio for every reading up front, so playback is
+// instant later instead of waiting on TTS at click time.
+async function pregenerateAudio(readings: Story[], date: string): Promise<void> {
+  await Promise.allSettled(
+    readings.map((story) => ensureAudioCached(date, story.slug, story.story))
+  );
 }
 
 async function saveToBlob(date: string, readings: Story[]): Promise<void> {
@@ -99,11 +117,13 @@ export async function GET(request: Request) {
       readings = assignProxyImageUrls(readings, today);
       readings = assignProxyAudioUrls(readings, today);
       await saveToBlob(today, readings);
-    } else if (readings.some((r) => !r.audioUrl)) {
-      // Backfill audioUrl on readings cached before the audio feature shipped —
-      // no new OpenAI text call needed, just re-derive the proxy URL from existing text.
+      await pregenerateAudio(readings, today);
+    } else if (needsAudioBackfill(readings)) {
+      // Backfill audioUrl/audioTimingsUrl on readings cached before those fields
+      // shipped — no new OpenAI text call needed, just re-derive the proxy URLs.
       readings = assignProxyAudioUrls(readings, today);
       await saveToBlob(today, readings);
+      await pregenerateAudio(readings, today);
     }
 
     if (!force && !prefetchedDates.has(today)) {
@@ -117,9 +137,13 @@ export async function GET(request: Request) {
             tomorrowReadings = assignProxyImageUrls(tomorrowReadings, tomorrow);
             tomorrowReadings = assignProxyAudioUrls(tomorrowReadings, tomorrow);
             await saveToBlob(tomorrow, tomorrowReadings);
-          } else if (existing.some((r) => !r.audioUrl)) {
+            await pregenerateAudio(tomorrowReadings, tomorrow);
+          } else if (needsAudioBackfill(existing)) {
             const patched = assignProxyAudioUrls(existing, tomorrow);
             await saveToBlob(tomorrow, patched);
+            await pregenerateAudio(patched, tomorrow);
+          } else {
+            await pregenerateAudio(existing, tomorrow);
           }
           await cleanupIfNeeded();
         } catch (err) {

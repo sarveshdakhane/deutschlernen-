@@ -18,6 +18,12 @@ export type QuizQuestion = {
 
 export type ReadingType = "news" | "dialogue" | "story" | "speaking";
 
+export type WordTiming = {
+  word: string;
+  start: number;
+  end: number;
+};
+
 export type Story = {
   slug: string;
   title: string;
@@ -27,6 +33,7 @@ export type Story = {
   imageKeyword?: string;
   imageUrl?: string;
   audioUrl?: string;
+  audioTimingsUrl?: string;
   readingType: ReadingType;
   story: string;
   grammarChecklist: {

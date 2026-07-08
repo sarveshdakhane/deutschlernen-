@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { get, put } from "@vercel/blob";
+import { ensureAudioCached } from "@/lib/audioCache.server";
 import { Story } from "@/lib/types";
+
+export const maxDuration = 60;
 
 export async function GET(_: Request, { params }: { params: Promise<{ date: string }> }) {
   const { date } = await params;
@@ -17,13 +20,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ date: stri
     const text = await new Response(result.stream).text();
     let data = JSON.parse(text) as Story[];
 
-    // Backfill audioUrl on readings cached before the audio feature shipped —
-    // no new OpenAI text call needed, just re-derive the proxy URL from existing text.
-    if (Array.isArray(data) && data.some((r) => !r.audioUrl)) {
-      data = data.map((story) => ({
-        ...story,
-        audioUrl: `/api/audio/${date}/${encodeURIComponent(story.slug)}?t=${encodeURIComponent(story.story)}`,
-      }));
+    // Backfill audioUrl/audioTimingsUrl on readings cached before those fields
+    // shipped — no new OpenAI text call needed, just re-derive the proxy URLs.
+    if (Array.isArray(data) && data.some((r) => !r.audioUrl || !r.audioTimingsUrl)) {
+      data = data.map((story) => {
+        const slug = encodeURIComponent(story.slug);
+        return {
+          ...story,
+          audioUrl: `/api/audio/${date}/${slug}?t=${encodeURIComponent(story.story)}`,
+          audioTimingsUrl: `/api/audio-timings/${date}/${slug}`,
+        };
+      });
       try {
         await put(`readings-${date}.json`, JSON.stringify(data), {
           access: "private",
@@ -34,6 +41,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ date: stri
         console.error(`[blob] audioUrl backfill save failed for ${date}:`, err);
       }
     }
+
+    await Promise.allSettled(
+      data.map((story) => ensureAudioCached(date, story.slug, story.story))
+    );
 
     return NextResponse.json(data);
   } catch (err) {
