@@ -99,6 +99,11 @@ export async function GET(request: Request) {
       readings = assignProxyImageUrls(readings, today);
       readings = assignProxyAudioUrls(readings, today);
       await saveToBlob(today, readings);
+    } else if (readings.some((r) => !r.audioUrl)) {
+      // Backfill audioUrl on readings cached before the audio feature shipped —
+      // no new OpenAI text call needed, just re-derive the proxy URL from existing text.
+      readings = assignProxyAudioUrls(readings, today);
+      await saveToBlob(today, readings);
     }
 
     if (!force && !prefetchedDates.has(today)) {
@@ -112,6 +117,9 @@ export async function GET(request: Request) {
             tomorrowReadings = assignProxyImageUrls(tomorrowReadings, tomorrow);
             tomorrowReadings = assignProxyAudioUrls(tomorrowReadings, tomorrow);
             await saveToBlob(tomorrow, tomorrowReadings);
+          } else if (existing.some((r) => !r.audioUrl)) {
+            const patched = assignProxyAudioUrls(existing, tomorrow);
+            await saveToBlob(tomorrow, patched);
           }
           await cleanupIfNeeded();
         } catch (err) {
