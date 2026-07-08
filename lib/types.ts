@@ -26,6 +26,7 @@ export type Story = {
   difficulty: "B1" | "A2";
   imageKeyword?: string;
   imageUrl?: string;
+  audioUrl?: string;
   readingType: ReadingType;
   story: string;
   grammarChecklist: {

@@ -35,6 +35,15 @@ function assignProxyImageUrls(readings: Story[], date: string): Story[] {
   });
 }
 
+// Stores the reading text in the proxy URL so the audio route can synthesize
+// speech on first request and cache the mp3 in blob.
+function assignProxyAudioUrls(readings: Story[], date: string): Story[] {
+  return readings.map((story) => {
+    const proxyUrl = `/api/audio/${date}/${encodeURIComponent(story.slug)}?t=${encodeURIComponent(story.story)}`;
+    return { ...story, audioUrl: proxyUrl };
+  });
+}
+
 async function saveToBlob(date: string, readings: Story[]): Promise<void> {
   if (!blobAvailable()) return;
   try {
@@ -88,6 +97,7 @@ export async function GET(request: Request) {
     if (!readings) {
       readings = await generateDailyReadings(today);
       readings = assignProxyImageUrls(readings, today);
+      readings = assignProxyAudioUrls(readings, today);
       await saveToBlob(today, readings);
     }
 
@@ -100,6 +110,7 @@ export async function GET(request: Request) {
           if (!existing) {
             let tomorrowReadings = await generateDailyReadings(tomorrow);
             tomorrowReadings = assignProxyImageUrls(tomorrowReadings, tomorrow);
+            tomorrowReadings = assignProxyAudioUrls(tomorrowReadings, tomorrow);
             await saveToBlob(tomorrow, tomorrowReadings);
           }
           await cleanupIfNeeded();

@@ -95,6 +95,15 @@ export default function StoryView({ story, onBack }: Props) {
         <h1 className="text-xl sm:text-3xl font-bold text-gray-900 leading-snug">{story.title}</h1>
       </div>
 
+      {/* Listen to the reading */}
+      {story.audioUrl && (
+        <div className="mb-4 sm:mb-6 print:hidden">
+          <audio controls preload="none" src={story.audioUrl} className="w-full max-w-md">
+            Your browser does not support the audio element.
+          </audio>
+        </div>
+      )}
+
       {/* Cover image */}
       {story.imageUrl && (
         <div className="mb-4 sm:mb-6 rounded-2xl overflow-hidden border border-gray-200">
