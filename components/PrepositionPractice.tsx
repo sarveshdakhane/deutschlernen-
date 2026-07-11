@@ -5,20 +5,22 @@ import { PrepositionQuestion } from "@/lib/types";
 
 const LETTERS = ["A", "B", "C", "D"];
 
-function SentenceWithBlank({ sentence, filled }: { sentence: string; filled: string | null }) {
+function SentenceWithBlank({ sentence, filled, correct }: { sentence: string; filled: string | null; correct: boolean | null }) {
   const [before, after] = useMemo(() => {
     const idx = sentence.indexOf("___");
     return idx === -1 ? [sentence, ""] : [sentence.slice(0, idx), sentence.slice(idx + 3)];
   }, [sentence]);
 
+  const blankStyle = !filled
+    ? "border-gray-300 text-gray-300"
+    : correct
+    ? "border-green-500 text-green-700 bg-green-50"
+    : "border-red-400 text-red-700 bg-red-50";
+
   return (
     <p className="text-base sm:text-lg text-gray-900 leading-relaxed">
       {before}
-      <span
-        className={`inline-block px-2 py-0.5 mx-1 rounded-lg border-b-2 font-semibold ${
-          filled ? "border-blue-500 text-blue-700 bg-blue-50" : "border-gray-300 text-gray-300"
-        }`}
-      >
+      <span className={`inline-block px-2 py-0.5 mx-1 rounded-lg border-b-2 font-semibold ${blankStyle}`}>
         {filled ?? "___"}
       </span>
       {after}
@@ -47,7 +49,11 @@ function Question({ q, index, total, onAnswered }: { q: PrepositionQuestion; ind
   return (
     <div className="border border-gray-100 rounded-2xl p-4 sm:p-5 bg-white">
       <p className="text-xs font-semibold text-gray-400 mb-2">Satz {index + 1} / {total}</p>
-      <SentenceWithBlank sentence={q.sentence} filled={selected !== null ? q.options[selected] : null} />
+      <SentenceWithBlank
+        sentence={q.sentence}
+        filled={selected !== null ? q.options[selected] : null}
+        correct={selected !== null ? selected === q.answer : null}
+      />
 
       <div className="grid grid-cols-2 gap-2 mt-4">
         {q.options.map((option, i) => (
