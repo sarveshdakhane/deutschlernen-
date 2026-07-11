@@ -16,6 +16,17 @@ export type QuizQuestion = {
   answer: number;
 };
 
+export type PrepositionQuestion = {
+  // Full sentence with the blank marked as "___".
+  sentence: string;
+  // Exactly 4 preposition options.
+  options: string[];
+  // 0-based index of the correct option.
+  answer: number;
+  // English translation of the completed (correct) sentence.
+  translation: string;
+};
+
 export type ReadingType = "news" | "dialogue" | "story" | "speaking";
 
 export type WordTiming = {

@@ -19,8 +19,10 @@ function formatTime(seconds: number): string {
 
 export default function AudioCoverPlayer({ audioUrl, imageUrl, alt, onTimeUpdate, onPlayStateChange }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
@@ -78,13 +80,33 @@ export default function AudioCoverPlayer({ audioUrl, imageUrl, alt, onTimeUpdate
     }
   };
 
-  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+  const seekToClientX = (clientX: number) => {
     const audio = audioRef.current;
-    if (!audio || !duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const track = trackRef.current;
+    if (!audio || !track || !duration) return;
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
     audio.currentTime = ratio * duration;
     setCurrentTime(audio.currentTime);
+  };
+
+  const onTrackPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!duration) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDragging(true);
+    seekToClientX(e.clientX);
+  };
+
+  const onTrackPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    seekToClientX(e.clientX);
+  };
+
+  const onTrackPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    setIsDragging(false);
   };
 
   const progress = duration > 0 ? currentTime / duration : 0;
@@ -124,13 +146,29 @@ export default function AudioCoverPlayer({ audioUrl, imageUrl, alt, onTimeUpdate
             )}
           </button>
 
+          <span className="text-xs text-white/90 tabular-nums shrink-0 w-9">
+            {formatTime(currentTime)}
+          </span>
+
           <div
-            onClick={seek}
-            className="flex-1 h-1.5 bg-white/30 rounded-full cursor-pointer"
+            ref={trackRef}
+            onPointerDown={onTrackPointerDown}
+            onPointerMove={onTrackPointerMove}
+            onPointerUp={onTrackPointerUp}
+            onPointerCancel={onTrackPointerUp}
+            className="group relative flex-1 h-4 flex items-center cursor-pointer touch-none"
           >
+            <div className="relative w-full h-1.5 bg-white/30 rounded-full">
+              <div
+                className="h-full bg-white rounded-full"
+                style={{ width: `${progress * 100}%` }}
+              />
+            </div>
             <div
-              className="h-full bg-white rounded-full"
-              style={{ width: `${progress * 100}%` }}
+              className={`absolute w-3 h-3 rounded-full bg-white shadow -translate-x-1/2 transition-opacity ${
+                isDragging ? "opacity-100 scale-110" : "opacity-0 group-hover:opacity-100"
+              }`}
+              style={{ left: `${progress * 100}%` }}
             />
           </div>
 

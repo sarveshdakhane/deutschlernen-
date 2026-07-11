@@ -13,9 +13,14 @@ export default function Header() {
         <Link href="/" onClick={handleHome} className="text-gray-900 font-semibold text-base sm:text-lg tracking-tight hover:text-gray-600 transition-colors">
           Daily Deutsch
         </Link>
-        <Link href="/archive" className="text-sm text-gray-500 hover:text-gray-900 transition-colors font-medium">
-          Past Reads
-        </Link>
+        <div className="flex items-center gap-5">
+          <Link href="/praepositionen" className="text-sm text-gray-500 hover:text-gray-900 transition-colors font-medium">
+            Präpositionen
+          </Link>
+          <Link href="/archive" className="text-sm text-gray-500 hover:text-gray-900 transition-colors font-medium">
+            Past Reads
+          </Link>
+        </div>
       </div>
     </header>
   );

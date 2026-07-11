@@ -1,7 +1,7 @@
 import {
   audioFilename,
   timingsFilename,
-  getCachedAudio,
+  getCachedAudioBuffer,
   getCachedTimings,
   transcribeWordTimings,
   cacheTimings,
@@ -34,12 +34,11 @@ export async function GET(
   // Fallback: audio should already be pre-generated — transcribe it now if the
   // timings step hasn't caught up yet.
   const audioFile = audioFilename(date, decodedSlug, voice);
-  const cachedAudio = await getCachedAudio(audioFile);
-  if (!cachedAudio) {
+  const buffer = await getCachedAudioBuffer(audioFile);
+  if (!buffer) {
     return new Response(null, { status: 404 });
   }
 
-  const buffer = await new Response(cachedAudio.stream).arrayBuffer();
   const timings = await transcribeWordTimings(buffer);
   if (!timings) {
     return new Response(null, { status: 404 });

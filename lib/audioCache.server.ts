@@ -35,7 +35,7 @@ export function timingsFilename(date: string, slug: string, voice: string): stri
   return `audio-${date}-${slug}-${voice}-timings.json`;
 }
 
-export async function getCachedAudio(
+async function getCachedAudio(
   filename: string
 ): Promise<{ stream: ReadableStream; contentType: string } | null> {
   if (!audioBlobAvailable()) return null;
@@ -50,7 +50,7 @@ export async function getCachedAudio(
   return null;
 }
 
-async function getCachedAudioBuffer(filename: string): Promise<ArrayBuffer | null> {
+export async function getCachedAudioBuffer(filename: string): Promise<ArrayBuffer | null> {
   const cached = await getCachedAudio(filename);
   if (!cached) return null;
   const bytes = await new Response(cached.stream).arrayBuffer();
