@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
 import PronounceSearch from "@/components/PronounceSearch";
+
+export const metadata: Metadata = {
+  title: "Pronounce German Words",
+  description:
+    "Hear any German word spoken aloud in real example sentences. Free German pronunciation lookup for learners.",
+  alternates: { canonical: "/pronounce" },
+};
 
 export default function PronouncePage() {
   return (

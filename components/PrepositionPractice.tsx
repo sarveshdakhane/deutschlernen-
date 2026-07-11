@@ -28,21 +28,34 @@ function SentenceWithBlank({ sentence, filled, correct }: { sentence: string; fi
   );
 }
 
+function shuffledOptions(options: string[]): { option: string; originalIndex: number }[] {
+  const arr = options.map((option, originalIndex) => ({ option, originalIndex }));
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 function Question({ q, index, total, onAnswered }: { q: PrepositionQuestion; index: number; total: number; onAnswered: (correct: boolean) => void }) {
   const [selected, setSelected] = useState<number | null>(null);
+  // Model output tends to place the correct option first — shuffle display order
+  // (once per question, stable across re-renders) so the correct answer isn't
+  // always at position A.
+  const options = useMemo(() => shuffledOptions(q.options), [q]);
 
-  const handleSelect = (i: number) => {
+  const handleSelect = (originalIndex: number) => {
     if (selected !== null) return;
-    setSelected(i);
-    onAnswered(i === q.answer);
+    setSelected(originalIndex);
+    onAnswered(originalIndex === q.answer);
   };
 
-  const getStyle = (i: number) => {
+  const getStyle = (originalIndex: number) => {
     if (selected === null) {
       return "border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50 cursor-pointer";
     }
-    if (i === q.answer) return "border-green-400 bg-green-50 text-green-800";
-    if (i === selected) return "border-red-300 bg-red-50 text-red-700";
+    if (originalIndex === q.answer) return "border-green-400 bg-green-50 text-green-800";
+    if (originalIndex === selected) return "border-red-300 bg-red-50 text-red-700";
     return "border-gray-100 bg-gray-50 text-gray-400";
   };
 
@@ -56,21 +69,21 @@ function Question({ q, index, total, onAnswered }: { q: PrepositionQuestion; ind
       />
 
       <div className="grid grid-cols-2 gap-2 mt-4">
-        {q.options.map((option, i) => (
+        {options.map(({ option, originalIndex }, displayIndex) => (
           <button
-            key={i}
+            key={originalIndex}
             disabled={selected !== null}
-            onClick={() => handleSelect(i)}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${getStyle(i)}`}
+            onClick={() => handleSelect(originalIndex)}
+            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${getStyle(originalIndex)}`}
           >
             <span
               className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold border
                 ${selected === null ? "border-gray-300 text-gray-500" :
-                  i === q.answer ? "border-green-500 bg-green-500 text-white" :
-                  i === selected ? "border-red-400 bg-red-400 text-white" :
+                  originalIndex === q.answer ? "border-green-500 bg-green-500 text-white" :
+                  originalIndex === selected ? "border-red-400 bg-red-400 text-white" :
                   "border-gray-200 text-gray-400"}`}
             >
-              {LETTERS[i]}
+              {LETTERS[displayIndex]}
             </span>
             {option}
           </button>
