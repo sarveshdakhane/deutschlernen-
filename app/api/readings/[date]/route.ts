@@ -3,7 +3,13 @@ import { get, put } from "@vercel/blob";
 import { ensureAudioCached, voiceForReadingType } from "@/lib/audioCache.server";
 import { Story } from "@/lib/types";
 
-export const maxDuration = 60;
+// Generation now runs generate -> review -> analyze sequentially per reading
+// type (see lib/claude.ts), roughly 3x the OpenAI round trips of before, even
+// though the 4 reading types still run in parallel with each other. Raised
+// from 60s accordingly. NOTE: Vercel Hobby plans cap function duration at
+// 60s regardless of this setting — confirm your plan tier supports 120s
+// before relying on it.
+export const maxDuration = 120;
 
 export async function GET(_: Request, { params }: { params: Promise<{ date: string }> }) {
   const { date } = await params;

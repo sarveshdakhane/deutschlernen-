@@ -5,7 +5,9 @@ import { generateDailyReadings } from "@/lib/claude";
 import { ensureAudioCached, voiceForReadingType } from "@/lib/audioCache.server";
 import { Story } from "@/lib/types";
 
-export const maxDuration = 60;
+// See app/api/readings/[date]/route.ts — same reasoning, kept in sync since
+// this route currently duplicates it.
+export const maxDuration = 120;
 
 const prefetchedDates = new Set<string>();
 
