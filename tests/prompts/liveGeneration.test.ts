@@ -34,7 +34,7 @@ suite("live prompt regression (generate -> review -> analyze)", () => {
         // Dialogue/speaking format sanity (same rule as validateContentQuality)
         if (type === "dialogue" || type === "speaking") {
           const lines = story.story.split("\n").map((l) => l.trim()).filter(Boolean);
-          const speakerLines = lines.filter((l) => /^[A-ZÄÖÜ][\wÀ-ÿ.'-]*:\s+\S/.test(l));
+          const speakerLines = lines.filter((l) => /^[A-ZÄÖÜ][\wÀ-ÿ.'-]*(?:\s[A-Za-zÀ-ÿ][\wÀ-ÿ.'-]*)*:\s+\S/.test(l));
           expect(speakerLines.length / lines.length).toBeGreaterThanOrEqual(0.4);
         }
 

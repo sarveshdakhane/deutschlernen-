@@ -71,7 +71,11 @@ function validateStory(data: unknown, expectedType: ReadingType): Story {
 // Deliberately runs BEFORE the grammar-analysis pass (see
 // generateOneReadingWithDiagnostics) so a broken review result never burns
 // an extra OpenAI call analyzing text that's about to be thrown away.
-function validateContentQuality(story: Story, type: ReadingType): void {
+// Exported for tests/pipeline/contentValidation.test.ts — this exact
+// function silently rejected valid dialogue using titled German names
+// ("Frau Berg:", "Herr Klein:") in production before the regex was fixed,
+// causing those reading types to fall back to the static sample story.
+export function validateContentQuality(story: Story, type: ReadingType): void {
   const text = story.story.trim();
   if (!text) throw new Error("Generated story text is empty");
 
@@ -86,7 +90,11 @@ function validateContentQuality(story: Story, type: ReadingType): void {
 
   if (type === "dialogue" || type === "speaking") {
     const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-    const speakerLines = lines.filter((l) => /^[A-ZÄÖÜ][\wÀ-ÿ.'-]*:\s+\S/.test(l));
+    // Matches "Mia:" as well as multi-word/titled names like "Frau Berg:",
+    // "Herr Klein:", "Dr. Fischer:" — the original single-word version
+    // rejected any titled name, which is common in exactly the scenarios
+    // (hotel, pharmacy, doctor's office) this app generates.
+    const speakerLines = lines.filter((l) => /^[A-ZÄÖÜ][\wÀ-ÿ.'-]*(?:\s[A-Za-zÀ-ÿ][\wÀ-ÿ.'-]*)*:\s+\S/.test(l));
     if (lines.length > 0 && speakerLines.length / lines.length < 0.4) {
       throw new Error("Generated dialogue does not follow the 'Name: text' speaker format");
     }
