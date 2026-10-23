@@ -1,13 +1,15 @@
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { Story, ReadingType, QualityScore } from "./types";
 import { buildPromptForType, GenerationPrompt } from "./storyPrompt";
 import { buildReviewSystemPrompt, buildReviewUserPrompt } from "./prompts/reviewPrompt";
 import { buildAnalysisSystemPrompt, buildAnalysisUserPrompt } from "./prompts/analysisPrompt";
 import { buildVocabularySystemPrompt, buildVocabularyUserPrompt } from "./prompts/vocabPrompt";
 import { PROMPT_VERSION } from "./prompts/shared";
-import { getModelForStage, getTemperatureForStage, VOCABULARY_ANALYSIS_ENABLED } from "./aiConfig.server";
+import { getModelForStage, shouldThinkForStage, VOCABULARY_ANALYSIS_ENABLED } from "./aiConfig.server";
 import { getSampleForType } from "./sampleStories";
 import { logPromptDebug, logPipelineSummary, TokenUsage, PromptDebugStage } from "./promptDebugLog.server";
+import { queryQueuedEntry, markEntryUsed } from "./notion.server";
+import { pickVocabularyForReading, recordVocabularyUsed } from "./vocabCooldown.server";
 
 function slugify(text: string): string {
   return text
@@ -70,7 +72,7 @@ function validateStory(data: unknown, expectedType: ReadingType): Story {
 // doesn't actually follow "Name: text") without spending another API call.
 // Deliberately runs BEFORE the grammar-analysis pass (see
 // generateOneReadingWithDiagnostics) so a broken review result never burns
-// an extra OpenAI call analyzing text that's about to be thrown away.
+// an extra Claude API call analyzing text that's about to be thrown away.
 // Exported for tests/pipeline/contentValidation.test.ts — this exact
 // function silently rejected valid dialogue using titled German names
 // ("Frau Berg:", "Herr Klein:") in production before the regex was fixed,
@@ -103,6 +105,16 @@ export function validateContentQuality(story: Story, type: ReadingType): void {
 
 function stripControlChars(raw: string): string {
   return raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
+}
+
+// Claude reliably follows the prompts' existing "Return JSON only. No
+// markdown." instruction, but strips a defensive ```-fence just in case —
+// cheap insurance against an occasional wrapped response, not something the
+// prompts currently need to ask for.
+function stripMarkdownFence(raw: string): string {
+  const trimmed = raw.trim();
+  const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return match ? match[1] : trimmed;
 }
 
 function clampScore(value: unknown): number | undefined {
@@ -138,31 +150,34 @@ type ChatJsonResult = {
 };
 
 async function callChatJson(
-  client: OpenAI,
+  client: Anthropic,
   model: string,
-  temperature: number,
+  thinking: boolean,
   maxTokens: number,
   system: string,
   user: string
 ): Promise<ChatJsonResult> {
   const start = Date.now();
-  const completion = await client.chat.completions.create({
+  const message = await client.messages.create({
     model,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
     max_tokens: maxTokens,
-    temperature,
-    response_format: { type: "json_object" },
+    system,
+    // Omitting `thinking` runs Claude's adaptive thinking by default; pass
+    // `disabled` for stages that are pure classification and don't benefit
+    // from reasoning (see shouldThinkForStage in lib/aiConfig.server.ts).
+    ...(thinking ? {} : { thinking: { type: "disabled" as const } }),
+    messages: [{ role: "user", content: user }],
   });
   const durationMs = Date.now() - start;
 
-  const rawText = stripControlChars(completion.choices[0]?.message?.content ?? "");
+  const textBlock = message.content.find(
+    (block): block is Anthropic.TextBlock => block.type === "text"
+  );
+  const rawText = stripMarkdownFence(stripControlChars(textBlock?.text ?? ""));
   const usage: TokenUsage = {
-    promptTokens: completion.usage?.prompt_tokens,
-    completionTokens: completion.usage?.completion_tokens,
-    totalTokens: completion.usage?.total_tokens,
+    promptTokens: message.usage.input_tokens,
+    completionTokens: message.usage.output_tokens,
+    totalTokens: message.usage.input_tokens + message.usage.output_tokens,
   };
 
   return { raw: JSON.parse(rawText), rawText, durationMs, usage };
@@ -177,10 +192,10 @@ function logStage(type: ReadingType, stage: PromptDebugStage, system: string, us
   });
 }
 
-async function runGenerationCall(client: OpenAI, type: ReadingType, prompt: GenerationPrompt): Promise<unknown> {
+async function runGenerationCall(client: Anthropic, type: ReadingType, prompt: GenerationPrompt): Promise<unknown> {
   const model = getModelForStage("generation");
-  const temperature = getTemperatureForStage("generation");
-  const result = await callChatJson(client, model, temperature, 4096, prompt.system, prompt.user);
+  const thinking = shouldThinkForStage("generation");
+  const result = await callChatJson(client, model, thinking, 8192, prompt.system, prompt.user);
   logStage(type, "generate", prompt.system, prompt.user, result);
   return result.raw;
 }
@@ -191,7 +206,7 @@ async function runGenerationCall(client: OpenAI, type: ReadingType, prompt: Gene
 // (and no quality score) rather than losing the whole reading over an
 // editing-step failure.
 async function runReviewPass(
-  client: OpenAI,
+  client: Anthropic,
   type: ReadingType,
   difficulty: "A2" | "B1",
   text: string
@@ -199,10 +214,10 @@ async function runReviewPass(
   const system = buildReviewSystemPrompt();
   const user = buildReviewUserPrompt(text, type, difficulty);
   const model = getModelForStage("review");
-  const temperature = getTemperatureForStage("review");
+  const thinking = shouldThinkForStage("review");
 
   try {
-    const result = await callChatJson(client, model, temperature, 4096, system, user);
+    const result = await callChatJson(client, model, thinking, 8192, system, user);
     logStage(type, "review", system, user, result);
 
     const parsed = result.raw as { text?: unknown; qualityScore?: unknown };
@@ -219,17 +234,17 @@ async function runReviewPass(
 // generator itself is never asked to self-report it. Fails soft to an
 // all-false checklist rather than failing the whole reading.
 async function runAnalysisPass(
-  client: OpenAI,
+  client: Anthropic,
   type: ReadingType,
   text: string
 ): Promise<Story["grammarChecklist"]> {
   const system = buildAnalysisSystemPrompt();
   const user = buildAnalysisUserPrompt(text);
   const model = getModelForStage("analysis");
-  const temperature = getTemperatureForStage("analysis");
+  const thinking = shouldThinkForStage("analysis");
 
   try {
-    const result = await callChatJson(client, model, temperature, 300, system, user);
+    const result = await callChatJson(client, model, thinking, 500, system, user);
     logStage(type, "analyze", system, user, result);
 
     const parsed = result.raw as Record<string, unknown>;
@@ -252,7 +267,7 @@ async function runAnalysisPass(
 // is set. Only flags mismatches (logged as a warning); it never blocks or
 // alters the reading, so leaving it disabled is always safe.
 async function runVocabularyPass(
-  client: OpenAI,
+  client: Anthropic,
   type: ReadingType,
   story: Story
 ): Promise<{ appropriate: boolean; flagged: string[] } | undefined> {
@@ -261,10 +276,10 @@ async function runVocabularyPass(
   const system = buildVocabularySystemPrompt();
   const user = buildVocabularyUserPrompt(story.vocabulary, story.difficulty);
   const model = getModelForStage("vocabulary");
-  const temperature = getTemperatureForStage("vocabulary");
+  const thinking = shouldThinkForStage("vocabulary");
 
   try {
-    const result = await callChatJson(client, model, temperature, 500, system, user);
+    const result = await callChatJson(client, model, thinking, 700, system, user);
     logStage(type, "vocabulary", system, user, result);
 
     const parsed = result.raw as { appropriate?: unknown; flagged?: unknown };
@@ -284,26 +299,27 @@ export type PipelineResult = { story: Story; quality?: QualityScore };
 // -> Validator -> Grammar Analyzer -> Vocabulary Analyzer (optional).
 // Validator runs right after the reviewer and before the grammar analyzer
 // on purpose: it's a free, local check, so it's the cheapest place to catch
-// a degenerate generation before spending another OpenAI call analyzing it.
+// a degenerate generation before spending another Claude API call analyzing it.
 //
-// `topicOverride` lets callers (currently the prompt regression tests)
-// force a specific scenario/topic instead of the deterministic daily
-// rotation — production code never passes it.
+// `topicOverride` lets callers force a specific scenario/topic instead of
+// the deterministic daily rotation — used by the prompt regression tests,
+// and in production by the Notion content queue (see queryQueuedEntry in
+// generateDailyReadingsCore below). `targetVocabulary`, when present, asks
+// the generator to work specific words into the text (see
+// buildVocabularyTargetInstruction in lib/prompts/shared.ts).
 export async function generateOneReadingWithDiagnostics(
   type: ReadingType,
   apiKey: string,
-  topicOverride?: string
+  topicOverride?: string,
+  targetVocabulary?: string[]
 ): Promise<PipelineResult> {
   const pipelineStart = Date.now();
-  const client = new OpenAI({ apiKey });
-  const prompt = buildPromptForType(type, topicOverride);
+  const client = new Anthropic({ apiKey });
+  const prompt = buildPromptForType(type, topicOverride, targetVocabulary);
 
   const generationModel = getModelForStage("generation");
   const reviewModel = getModelForStage("review");
   const analysisModel = getModelForStage("analysis");
-  const generationTemperature = getTemperatureForStage("generation");
-  const reviewTemperature = getTemperatureForStage("review");
-  const analysisTemperature = getTemperatureForStage("analysis");
 
   // 1. Generate — the writer's only job is natural German, nothing else.
   const draft = await runGenerationCall(client, type, prompt);
@@ -326,14 +342,22 @@ export async function generateOneReadingWithDiagnostics(
     console.warn(`[vocabulary] "${type}" flagged words outside ${story.difficulty} level:`, vocabResult.flagged);
   }
 
+  // Cheap local check (no extra API call) that requested vocabulary actually
+  // made it into the final text — logs a warning only, same fail-soft
+  // philosophy as the rest of this pipeline.
+  if (targetVocabulary && targetVocabulary.length > 0) {
+    const lowerText = story.story.toLowerCase();
+    const missing = targetVocabulary.filter((w) => !lowerText.includes(w.toLowerCase()));
+    if (missing.length > 0) {
+      console.warn(`[vocabulary-target] "${type}" missing requested word(s):`, missing);
+    }
+  }
+
   story.meta = {
     promptVersion: PROMPT_VERSION,
     generationModel,
     reviewModel,
     analysisModel,
-    generationTemperature,
-    reviewTemperature,
-    analysisTemperature,
     generatedAt: new Date().toISOString(),
   };
 
@@ -347,8 +371,13 @@ export async function generateOneReadingWithDiagnostics(
   return { story, quality: review.quality };
 }
 
-async function generateOneReading(type: ReadingType, apiKey: string): Promise<Story> {
-  return (await generateOneReadingWithDiagnostics(type, apiKey)).story;
+async function generateOneReading(
+  type: ReadingType,
+  apiKey: string,
+  topicOverride?: string,
+  targetVocabulary?: string[]
+): Promise<Story> {
+  return (await generateOneReadingWithDiagnostics(type, apiKey, topicOverride, targetVocabulary)).story;
 }
 
 async function fetchPixabayImage(topic: string): Promise<string | undefined> {
@@ -367,29 +396,20 @@ async function fetchPixabayImage(topic: string): Promise<string | undefined> {
   }
 }
 
-// Per-instance promise cache — if two requests hit the same cold instance before
-// unstable_cache propagates, they share one Promise and one OpenAI call.
-const inflightByDate = new Map<string, Promise<Story[]>>();
-
-export function generateDailyReadings(date?: string): Promise<Story[]> {
-  const targetDate = date ?? new Date().toISOString().split("T")[0];
-
-  const inflight = inflightByDate.get(targetDate);
-  if (inflight) return inflight;
-
-  const promise = _generateDailyReadings(targetDate);
-  inflightByDate.set(targetDate, promise);
-  // Clean up after settling so the Map doesn't grow forever
-  promise.finally(() => inflightByDate.delete(targetDate));
-  return promise;
-}
-
-async function _generateDailyReadings(targetDate: string): Promise<Story[]> {
+// Concurrency dedup lives in GenerationCoordinatorDO (workers/generationCoordinator.ts)
+// now, not here — a Durable Object instance per date+kind is globally unique,
+// unlike a module-level Map, which only dedupes requests that happen to land
+// on the same Worker isolate. This is the actual generator the coordinator calls.
+// `bucket` is only needed for the Notion vocabulary cooldown record
+// (lib/vocabCooldown.server.ts) — threaded in by the coordinator, which
+// already holds it, rather than reached for via getCloudflareContext() here
+// (this module also runs outside any Next.js request context).
+export async function generateDailyReadingsCore(targetDate: string, bucket: R2Bucket): Promise<Story[]> {
   const types: ReadingType[] = ["news", "dialogue", "story", "speaking"];
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
 
   if (!apiKey) {
-    console.log("[generate] No OPENAI_API_KEY — using static dev stories (no API call made)");
+    console.log("[generate] No ANTHROPIC_API_KEY — using static dev stories (no API call made)");
     const devStories = types.map((t) => ({ ...getSampleForType(t), date: targetDate }));
     await Promise.all(
       devStories.map(async (story) => {
@@ -401,8 +421,25 @@ async function _generateDailyReadings(targetDate: string): Promise<Story[]> {
 
   const results = await Promise.allSettled(
     types.map(async (type) => {
-      const story = await generateOneReading(type, apiKey);
+      // Notion-sourced topic takes priority over the deterministic
+      // day-indexed rotation when a "Ready" queue entry exists for this
+      // type; vocabulary is sourced independently from the Vocab page's
+      // word pool (lib/vocabCooldown.server.ts) regardless of whether a
+      // topic entry exists. Both are only marked "used" once generation +
+      // image fetch actually succeed — on failure, Promise.allSettled
+      // catches the rejection below and the topic row stays "Ready" /
+      // the words stay out of cooldown for the next cycle to retry.
+      const queued = await queryQueuedEntry(type);
+      const vocabWords = await pickVocabularyForReading(bucket);
+      const story = await generateOneReading(
+        type,
+        apiKey,
+        queued?.topic,
+        vocabWords.length > 0 ? vocabWords : undefined
+      );
       const imageUrl = await fetchPixabayImage(story.imageKeyword ?? story.topic);
+      if (queued) await markEntryUsed(queued.pageId);
+      await recordVocabularyUsed(bucket, vocabWords);
       return { ...story, date: targetDate, imageUrl };
     })
   );

@@ -3,8 +3,19 @@ import {
   composeSystemPrompt,
   NATURAL_GERMAN_RULES,
   COLLOCATION_RULES,
+  buildVocabularyTargetInstruction,
   selfCheckInstruction,
 } from "./prompts/shared";
+
+// Renders the optional vocabulary-targeting block, or an empty string when no
+// target words were supplied (the common case — only the Notion content
+// queue in lib/claude.ts passes this). Kept as one helper so every
+// build*Prompt injects it identically.
+function vocabularyTargetSection(targetVocabulary?: string[]): string {
+  return targetVocabulary && targetVocabulary.length > 0
+    ? `\n${buildVocabularyTargetInstruction(targetVocabulary)}\n`
+    : "";
+}
 
 export type GenerationPrompt = { system: string; user: string };
 
@@ -57,7 +68,7 @@ export const STORY_STYLE_EXCERPT = `Nach der Arbeit ging Julia noch schnell eink
 
 export const NEWS_STYLE_EXCERPT = `Laut einer aktuellen Studie ist die Zahl der Fahrgäste im öffentlichen Nahverkehr im letzten Jahr deutlich gestiegen. „Das zeigt, dass sich das Angebot lohnt", sagte ein Sprecher des Verkehrsverbunds.`;
 
-export function buildNewsPrompt(topicOverride?: string): GenerationPrompt {
+export function buildNewsPrompt(topicOverride?: string, targetVocabulary?: string[]): GenerationPrompt {
   const today = new Date().toISOString().split("T")[0];
   const categories = [
     "German federal politics (Bundestag, Koalition, new laws, party decisions, chancellor/ministers)",
@@ -104,7 +115,7 @@ ARTICLE REQUIREMENTS:
 ${NATURAL_GERMAN_RULES}
 
 ${COLLOCATION_RULES}
-
+${vocabularyTargetSection(targetVocabulary)}
 VOCABULARY:
 - 8–12 useful words or phrases from the article.
 - Include German word/phrase, English meaning, and a German example sentence.
@@ -132,7 +143,7 @@ Return JSON only. No markdown. No explanations outside JSON.`;
   return { system, user };
 }
 
-export function buildDialoguePrompt(topicOverride?: string): GenerationPrompt {
+export function buildDialoguePrompt(topicOverride?: string, targetVocabulary?: string[]): GenerationPrompt {
   const today = new Date().toISOString().split("T")[0];
   const topics = [
     "two colleagues arguing (politely) about how to handle a difficult customer at work",
@@ -189,7 +200,7 @@ CONTENT REQUIREMENTS:
 ${NATURAL_GERMAN_RULES}
 
 ${COLLOCATION_RULES}
-
+${vocabularyTargetSection(targetVocabulary)}
 VOCABULARY:
 - 10–14 useful words or expressions from the dialogue.
 - Include German word/phrase, English meaning, and a German example sentence.
@@ -217,7 +228,7 @@ Return JSON only. No markdown. No explanations outside JSON.`;
   return { system, user };
 }
 
-export function buildStoryPrompt(topicOverride?: string): GenerationPrompt {
+export function buildStoryPrompt(topicOverride?: string, targetVocabulary?: string[]): GenerationPrompt {
   const system = composeSystemPrompt(
     "Right now you are working as a German B1 exam teacher, writing a short story for reading practice."
   );
@@ -251,7 +262,7 @@ STORY REQUIREMENTS:
 ${NATURAL_GERMAN_RULES}
 
 ${COLLOCATION_RULES}
-
+${vocabularyTargetSection(targetVocabulary)}
 VOCABULARY:
 - 10–14 useful words from the story.
 - Include German word, English meaning, and a German example sentence.
@@ -279,7 +290,7 @@ Return JSON only. No markdown. No explanations outside JSON.`;
   return { system, user };
 }
 
-export function buildSpeakingPrompt(topicOverride?: string): GenerationPrompt {
+export function buildSpeakingPrompt(topicOverride?: string, targetVocabulary?: string[]): GenerationPrompt {
   const today = new Date().toISOString().split("T")[0];
   const scenarios = [
     "two friends making plans to go hiking — one is very enthusiastic, the other hesitant",
@@ -334,7 +345,7 @@ CONTENT REQUIREMENTS:
 ${NATURAL_GERMAN_RULES}
 
 ${COLLOCATION_RULES}
-
+${vocabularyTargetSection(targetVocabulary)}
 VOCABULARY:
 - 6–9 key words or phrases from the dialogue, useful for A2 learners.
 - Include German word/phrase, English meaning, and a simple German example sentence.
@@ -384,11 +395,15 @@ Return JSON only. No markdown. No explanations outside JSON.`;
   return { system, user };
 }
 
-export function buildPromptForType(type: ReadingType, topicOverride?: string): GenerationPrompt {
+export function buildPromptForType(
+  type: ReadingType,
+  topicOverride?: string,
+  targetVocabulary?: string[]
+): GenerationPrompt {
   switch (type) {
-    case "news":     return buildNewsPrompt(topicOverride);
-    case "dialogue": return buildDialoguePrompt(topicOverride);
-    case "story":    return buildStoryPrompt(topicOverride);
-    case "speaking": return buildSpeakingPrompt(topicOverride);
+    case "news":     return buildNewsPrompt(topicOverride, targetVocabulary);
+    case "dialogue": return buildDialoguePrompt(topicOverride, targetVocabulary);
+    case "story":    return buildStoryPrompt(topicOverride, targetVocabulary);
+    case "speaking": return buildSpeakingPrompt(topicOverride, targetVocabulary);
   }
 }

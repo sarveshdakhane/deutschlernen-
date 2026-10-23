@@ -1,4 +1,5 @@
-import { get, put } from "@vercel/blob";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { getBinary, putBinary } from "@/lib/storage.server";
 
 export const maxDuration = 30;
 
@@ -14,20 +15,18 @@ export async function GET(
   }
 
   const filename = `image-${date}-${decodeURIComponent(slug)}.jpg`;
+  const { env } = getCloudflareContext();
+  const bucket = env.CONTENT_BUCKET;
 
-  // Serve from blob if already cached
-  try {
-    const cached = await get(filename, { access: "private" });
-    if (cached?.statusCode === 200 && cached.stream) {
-      return new Response(cached.stream, {
-        headers: {
-          "Content-Type": cached.blob.contentType ?? "image/jpeg",
-          "Cache-Control": "public, max-age=604800, immutable",
-        },
-      });
-    }
-  } catch {
-    // not cached yet — fetch from Pixabay
+  // Serve from the content bucket if already cached
+  const cached = await getBinary(bucket, filename);
+  if (cached) {
+    return new Response(cached.data, {
+      headers: {
+        "Content-Type": cached.contentType ?? "image/jpeg",
+        "Cache-Control": "public, max-age=604800, immutable",
+      },
+    });
   }
 
   if (!keyword || !process.env.PIXABAY_API_KEY) {
@@ -49,11 +48,7 @@ export async function GET(
     const buffer = await imgRes.arrayBuffer();
     const contentType = imgRes.headers.get("content-type") ?? "image/jpeg";
 
-    await put(filename, buffer, {
-      access: "private",
-      addRandomSuffix: false,
-      contentType,
-    });
+    await putBinary(bucket, filename, buffer, contentType);
 
     return new Response(buffer, {
       headers: {

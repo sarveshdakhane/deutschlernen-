@@ -1,0 +1,58 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "deutsch-lernen",
+	"main": "workers/entry.ts",
+	"compatibility_date": "2026-10-20",
+	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	"services": [
+		{
+			// Self-reference service binding, the service name must match the worker name
+			// see https://opennext.js.org/cloudflare/caching
+			"binding": "WORKER_SELF_REFERENCE",
+			"service": "deutsch-lernen"
+		}
+	],
+	"r2_buckets": [
+		{
+			// Application content cache — replaces Vercel Blob. Holds readings JSON,
+			// preposition JSON, pronunciation clips, the vocabulary-cooldown record,
+			// and proxied topic images. See lib/storage.server.ts.
+			"binding": "CONTENT_BUCKET",
+			"bucket_name": "deutsch-lernen-content"
+		}
+	],
+	"images": {
+		"binding": "IMAGES"
+	},
+
+	"routes": [
+		{ "pattern": "dailydeutsch.org", "custom_domain": true },
+		{ "pattern": "www.dailydeutsch.org", "custom_domain": true }
+	],
+
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "GENERATION_COORDINATOR",
+				"class_name": "GenerationCoordinatorDO"
+			}
+		]
+	},
+	"exports": {
+		"GenerationCoordinatorDO": {
+			"type": "durable-object",
+			"storage": "sqlite"
+		}
+	},
+
+	"triggers": {
+		// Daily content rollover. UTC — adjust if the desired local rollover time
+		// changes (Germany is UTC+1/+2 depending on DST).
+		"crons": ["0 22 * * *"]
+	}
+}

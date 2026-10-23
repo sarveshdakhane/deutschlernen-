@@ -3,8 +3,7 @@
 import { useState, useRef } from "react";
 import { Story, ReadingType } from "@/lib/types";
 import QuizSection from "./QuizSection";
-import AudioCoverPlayer from "./AudioCoverPlayer";
-import HighlightedStoryText from "./HighlightedStoryText";
+import StoryParagraphs from "./StoryParagraphs";
 
 const TYPE_CONFIG: Record<ReadingType, { label: string; icon: string; bg: string; text: string }> = {
   news:     { label: "Nachrichten", icon: "📰", bg: "bg-blue-50",   text: "text-blue-700" },
@@ -23,8 +22,6 @@ export default function StoryView({ story, onBack }: Props) {
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const edgeSwipe = useRef(false);
-  const [audioTime, setAudioTime] = useState(0);
-  const [audioPlaying, setAudioPlaying] = useState(false);
 
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -99,35 +96,20 @@ export default function StoryView({ story, onBack }: Props) {
         <h1 className="text-xl sm:text-3xl font-bold text-gray-900 leading-snug">{story.title}</h1>
       </div>
 
-      {/* Cover image with play/pause + progress bar overlay */}
-      {story.audioUrl ? (
-        <AudioCoverPlayer
-          audioUrl={story.audioUrl}
-          imageUrl={story.imageUrl}
-          alt={story.topic}
-          onTimeUpdate={setAudioTime}
-          onPlayStateChange={setAudioPlaying}
-        />
-      ) : (
-        story.imageUrl && (
-          <div className="mb-4 sm:mb-6 rounded-2xl overflow-hidden border border-gray-200">
-            <img
-              src={story.imageUrl}
-              alt={story.topic}
-              className="w-full object-cover max-h-64 sm:max-h-80"
-            />
-          </div>
-        )
+      {/* Cover image */}
+      {story.imageUrl && (
+        <div className="mb-4 sm:mb-6 rounded-2xl overflow-hidden border border-gray-200">
+          <img
+            src={story.imageUrl}
+            alt={story.topic}
+            className="w-full object-cover max-h-64 sm:max-h-80"
+          />
+        </div>
       )}
 
       {/* Story text */}
       <section className="bg-white border border-gray-200 rounded-2xl px-5 py-7 sm:px-14 sm:py-12 mb-4 sm:mb-6 space-y-5 sm:space-y-6">
-        <HighlightedStoryText
-          paragraphs={paragraphs}
-          timingsUrl={story.audioTimingsUrl}
-          currentTime={audioTime}
-          isPlaying={audioPlaying}
-        />
+        <StoryParagraphs paragraphs={paragraphs} />
       </section>
 
       {/* Quiz */}

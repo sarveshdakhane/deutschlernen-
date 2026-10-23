@@ -1,4 +1,4 @@
-import { put, get } from "@vercel/blob";
+import { getJson, putJson } from "./storage.server";
 
 export type PronunciationClip = {
   sentenceId: number;
@@ -7,36 +7,18 @@ export type PronunciationClip = {
   translation?: string;
 };
 
-const blobAvailable = () =>
-  !!process.env.BLOB_READ_WRITE_TOKEN ||
-  !!process.env.BLOB_STORE_ID ||
-  !!process.env.VERCEL_OIDC_TOKEN;
-
 function slugifyWord(word: string): string {
   return encodeURIComponent(word.trim().toLowerCase());
 }
 
-export async function getCachedClips(word: string): Promise<PronunciationClip[] | null> {
-  if (!blobAvailable()) return null;
-  try {
-    const result = await get(`pronounce-${slugifyWord(word)}.json`, { access: "private" });
-    if (!result || result.statusCode !== 200 || !result.stream) return null;
-    const text = await new Response(result.stream).text();
-    return JSON.parse(text) as PronunciationClip[];
-  } catch {
-    return null;
-  }
+export async function getCachedClips(bucket: R2Bucket, word: string): Promise<PronunciationClip[] | null> {
+  return getJson<PronunciationClip[]>(bucket, `pronounce-${slugifyWord(word)}.json`);
 }
 
-export async function saveCachedClips(word: string, clips: PronunciationClip[]): Promise<void> {
-  if (!blobAvailable()) return;
+export async function saveCachedClips(bucket: R2Bucket, word: string, clips: PronunciationClip[]): Promise<void> {
   try {
-    await put(`pronounce-${slugifyWord(word)}.json`, JSON.stringify(clips), {
-      access: "private",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-    });
+    await putJson(bucket, `pronounce-${slugifyWord(word)}.json`, clips);
   } catch (err) {
-    console.error(`[blob] pronounce cache save failed for "${word}":`, err);
+    console.error(`[storage] pronounce cache save failed for "${word}":`, err);
   }
 }

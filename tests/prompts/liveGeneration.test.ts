@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { generateOneReadingWithDiagnostics } from "../../lib/claude";
 import { REGRESSION_SCENARIOS } from "./scenarios";
 
-// This suite makes real OpenAI API calls (3 per scenario: generate, review,
+// This suite makes real Claude API calls (3 per scenario: generate, review,
 // analyze) and costs real money, so it is opt-in only — never part of the
 // default `npm test` run or CI by default. Run explicitly with:
 //   npm run test:live
-// which sets RUN_LIVE_PROMPT_TESTS=true. Requires OPENAI_API_KEY.
-const apiKey = process.env.OPENAI_API_KEY;
+// which sets RUN_LIVE_PROMPT_TESTS=true. Requires ANTHROPIC_API_KEY.
+const apiKey = process.env.ANTHROPIC_API_KEY;
 const shouldRun = process.env.RUN_LIVE_PROMPT_TESTS === "true" && !!apiKey;
 
 const suite = shouldRun ? describe : describe.skip;
@@ -47,7 +47,7 @@ suite("live prompt regression (generate -> review -> analyze)", () => {
           expect(quality.confidence).toBeGreaterThanOrEqual(0.4);
         }
       },
-      60_000 // 3 sequential OpenAI calls — needs real headroom
+      60_000 // 3 sequential Claude calls — needs real headroom
     );
   }
 });

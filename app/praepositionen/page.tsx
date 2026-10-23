@@ -36,8 +36,11 @@ export default function PraepositionenPage() {
 
   useEffect(() => {
     fetch("/api/prepositions")
-      .then((r) => { if (!r.ok) throw new Error("Failed to fetch"); return r.json(); })
-      .then((d: { date: string; questions: PrepositionQuestion[] }) => {
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to fetch");
+        return r.json() as Promise<{ date: string; questions: PrepositionQuestion[] }>;
+      })
+      .then((d) => {
         setDate(d.date);
         setQuestions(d.questions ?? []);
       })

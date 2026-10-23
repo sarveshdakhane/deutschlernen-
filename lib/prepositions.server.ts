@@ -1,7 +1,8 @@
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { PrepositionQuestion } from "./types";
 import { buildPrepositionPrompt } from "./prepositionPrompt";
 import { samplePrepositionQuestions } from "./samplePrepositions";
+import { getModelForStage, shouldThinkForStage } from "./aiConfig.server";
 
 function validateQuestions(data: unknown): PrepositionQuestion[] {
   if (typeof data !== "object" || data === null) throw new Error("Response is not an object");
@@ -27,52 +28,44 @@ function validateQuestions(data: unknown): PrepositionQuestion[] {
   });
 }
 
-async function generateFromOpenAI(apiKey: string): Promise<PrepositionQuestion[]> {
-  const client = new OpenAI({ apiKey });
+async function generateFromClaude(apiKey: string): Promise<PrepositionQuestion[]> {
+  const client = new Anthropic({ apiKey });
+  const model = getModelForStage("prepositions");
+  const thinking = shouldThinkForStage("prepositions");
 
-  // Uses the full gpt-4o model (not the -mini variant used elsewhere in this app)
-  // because this feature's correct answer is the entire point of the exercise —
-  // mini was observed marking grammatically wrong options as correct (e.g. "zu das
-  // Büro"). It's one cached call per day, so the extra cost is negligible.
-  const completion = await client.chat.completions.create({
-    model: "gpt-4o",
-    messages: [{ role: "user", content: buildPrepositionPrompt() }],
+  // This feature's correct answer is the entire point of the exercise, so
+  // model choice here matters more than cost — see PREPOSITION_MODEL in
+  // lib/aiConfig.server.ts if grammar-judgment issues ever reappear (the
+  // gpt-4o-mini-era predecessor of this prompt was observed marking
+  // grammatically wrong options as correct, e.g. "zu das Büro").
+  const message = await client.messages.create({
+    model,
     max_tokens: 2048,
-    temperature: 0.7,
-    response_format: { type: "json_object" },
+    ...(thinking ? {} : { thinking: { type: "disabled" as const } }),
+    messages: [{ role: "user", content: buildPrepositionPrompt() }],
   });
 
-  const raw = completion.choices[0]?.message?.content ?? "";
-  const text = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
+  const textBlock = message.content.find(
+    (block): block is Anthropic.TextBlock => block.type === "text"
+  );
+  const raw = textBlock?.text ?? "";
+  const text = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ").trim();
   return validateQuestions(JSON.parse(text));
 }
 
-// Per-instance promise cache — if two requests hit the same cold instance before
-// the blob cache propagates, they share one Promise and one OpenAI call.
-const inflightByDate = new Map<string, Promise<PrepositionQuestion[]>>();
-
-export function generateDailyPrepositions(date?: string): Promise<PrepositionQuestion[]> {
-  const targetDate = date ?? new Date().toISOString().split("T")[0];
-
-  const inflight = inflightByDate.get(targetDate);
-  if (inflight) return inflight;
-
-  const promise = _generateDailyPrepositions();
-  inflightByDate.set(targetDate, promise);
-  promise.finally(() => inflightByDate.delete(targetDate));
-  return promise;
-}
-
-async function _generateDailyPrepositions(): Promise<PrepositionQuestion[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
+// Concurrency dedup lives in GenerationCoordinatorDO (workers/generationCoordinator.ts)
+// now, not here — see the comment on generateDailyReadingsCore in lib/claude.ts
+// for why a module-level Map isn't a correct dedup mechanism on Workers.
+export async function generateDailyPrepositionsCore(): Promise<PrepositionQuestion[]> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
 
   if (!apiKey) {
-    console.log("[prepositions] No OPENAI_API_KEY — using static dev sample (no API call made)");
+    console.log("[prepositions] No ANTHROPIC_API_KEY — using static dev sample (no API call made)");
     return samplePrepositionQuestions;
   }
 
   try {
-    return await generateFromOpenAI(apiKey);
+    return await generateFromClaude(apiKey);
   } catch (err) {
     console.error("[prepositions] generation failed, falling back to sample:", err);
     return samplePrepositionQuestions;

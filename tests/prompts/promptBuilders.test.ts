@@ -17,7 +17,10 @@ import { ReadingType } from "../../lib/types";
 // that the live regression suite (tests/prompts/liveGeneration.test.ts)
 // depends on.
 
-const BUILDERS: { name: ReadingType; build: (override?: string) => GenerationPrompt }[] = [
+const BUILDERS: {
+  name: ReadingType;
+  build: (override?: string, targetVocabulary?: string[]) => GenerationPrompt;
+}[] = [
   { name: "news", build: buildNewsPrompt },
   { name: "dialogue", build: buildDialoguePrompt },
   { name: "story", build: buildStoryPrompt },
@@ -63,6 +66,17 @@ for (const { name, build } of BUILDERS) {
       const overridden = build(marker);
       expect(overridden.user).toContain(marker);
     });
+
+    it("omits the required-vocabulary block when no targetVocabulary is given", () => {
+      expect(prompt.user).not.toContain("REQUIRED VOCABULARY");
+    });
+
+    it("injects the required-vocabulary block when targetVocabulary is given", () => {
+      const withVocab = build(undefined, ["die Verspätung", "sich entschuldigen"]);
+      expect(withVocab.user).toContain("REQUIRED VOCABULARY");
+      expect(withVocab.user).toContain("die Verspätung");
+      expect(withVocab.user).toContain("sich entschuldigen");
+    });
   });
 }
 
@@ -72,6 +86,16 @@ describe("buildPromptForType", () => {
     for (const type of types) {
       const marker = `TEST_MARKER_${type}`;
       const prompt = buildPromptForType(type, marker);
+      expect(prompt.user).toContain(marker);
+    }
+  });
+
+  it("forwards targetVocabulary to the correct builder for every reading type", () => {
+    const types: ReadingType[] = ["news", "dialogue", "story", "speaking"];
+    for (const type of types) {
+      const marker = `TEST_VOCAB_MARKER_${type}`;
+      const prompt = buildPromptForType(type, undefined, [marker]);
+      expect(prompt.user).toContain("REQUIRED VOCABULARY");
       expect(prompt.user).toContain(marker);
     }
   });

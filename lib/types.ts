@@ -29,25 +29,19 @@ export type PrepositionQuestion = {
 
 export type ReadingType = "news" | "dialogue" | "story" | "speaking";
 
-export type WordTiming = {
-  word: string;
-  start: number;
-  end: number;
-};
-
 // Pipeline provenance for a generated artifact — which prompt version and
 // models produced it, and when. Purely for debugging (e.g. correlating a
 // quality regression with a prompt or model change); no UI reads this.
 // Deliberately excludes quality scores — see QualityScore below, which is
 // never attached to a Story and only ever flows through server-side logs.
+// No temperature fields — Claude's models reject non-default sampling
+// params, so there's nothing per-stage to record here (see
+// lib/aiConfig.server.ts's shouldThinkForStage for the replacement lever).
 export type PipelineMeta = {
   promptVersion: string;
   generationModel: string;
   reviewModel: string;
   analysisModel: string;
-  generationTemperature: number;
-  reviewTemperature: number;
-  analysisTemperature: number;
   generatedAt: string;
 };
 
@@ -75,8 +69,6 @@ export type Story = {
   difficulty: "B1" | "A2";
   imageKeyword?: string;
   imageUrl?: string;
-  audioUrl?: string;
-  audioTimingsUrl?: string;
   readingType: ReadingType;
   story: string;
   grammarChecklist: {

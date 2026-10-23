@@ -42,7 +42,7 @@ export default function PronounceSearch({ compact = false }: Props) {
         signal: controller.signal,
       });
       if (!res.ok || !res.body) {
-        const data = await res.json().catch(() => null);
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(data?.error ?? "Failed to fetch pronunciation clips");
       }
 

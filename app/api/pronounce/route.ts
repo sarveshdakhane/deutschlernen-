@@ -1,3 +1,4 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getCachedClips, saveCachedClips, PronunciationClip } from "@/lib/pronounceCache.server";
 
 export const maxDuration = 30;
@@ -49,13 +50,15 @@ export async function GET(request: Request) {
   }
 
   const encoder = new TextEncoder();
+  const { env } = getCloudflareContext();
+  const bucket = env.CONTENT_BUCKET;
 
   const stream = new ReadableStream({
     async start(controller) {
       const emit = (clip: PronunciationClip) => controller.enqueue(encoder.encode(JSON.stringify(clip) + "\n"));
 
       try {
-        const cached = await getCachedClips(word);
+        const cached = await getCachedClips(bucket, word);
         if (cached) {
           cached.forEach(emit);
           controller.close();
@@ -105,7 +108,7 @@ export async function GET(request: Request) {
 
         if (request.signal.aborted) return;
 
-        await saveCachedClips(word, clips);
+        await saveCachedClips(bucket, word, clips);
         controller.close();
       } catch (error) {
         console.error("[pronounce] fatal error:", error);

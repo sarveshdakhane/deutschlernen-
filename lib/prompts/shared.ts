@@ -20,7 +20,7 @@ export function composeSystemPrompt(roleAddendum: string): string {
 // or analysisPrompt.ts changes meaningfully. It travels with every generated
 // Story (see Story["meta"] in lib/types.ts) purely for debugging — e.g. to
 // tell whether a quality regression correlates with a prompt edit.
-export const PROMPT_VERSION = "2.0.0";
+export const PROMPT_VERSION = "2.1.0";
 
 export const NATURAL_GERMAN_RULES = `NATURALNESS RULES (apply to every sentence you write):
 - Prioritize realism and idiomatic German over grammatical feature coverage. If a required grammar feature would sound forced in a given sentence, leave it out rather than force it in — naturalness always wins over demonstrating grammar.
@@ -39,6 +39,19 @@ Always use the single most common native German collocation for the meaning inte
 - Verb + noun combinations (e.g. "einen Termin vereinbaren", "eine Frage stellen").
 - Booking, travel, and hotel language (e.g. "ein Zimmer reservieren/buchen", "vom ... bis zum ...", "eine Übernachtung", "pro Nacht") — use the phrasing a receptionist or traveler would actually use.
 - Any other fixed expression: when in doubt, pick the phrasing you would expect to find in native-speaker usage, not the phrasing that is merely grammatically defensible.`;
+
+// Only injected when a caller (the Notion content queue, via lib/claude.ts)
+// supplies specific words to target. This deliberately carves out an
+// exception to NATURAL_GERMAN_RULES's "never force a construction just to
+// show it off" principle — without it, that rule would work directly
+// against intentional vocabulary targeting. The instruction still asks for
+// natural placement (adapt the scenario to fit the word, not the word to
+// fit the scenario) rather than dropping naturalness entirely.
+export function buildVocabularyTargetInstruction(words: string[]): string {
+  return `REQUIRED VOCABULARY:
+The following German words/phrases must each appear naturally somewhere in the text you write (not just listed in the vocabulary section): ${words.join(", ")}.
+This is an intentional exception to the usual rule against forcing vocabulary in — adapt the scenario slightly so each word fits naturally where a native speaker would actually use it, rather than inserting it awkwardly or leaving it out. If a word genuinely cannot fit any natural sentence in this scenario, prioritize naturalness and skip it rather than writing something stilted.`;
+}
 
 export function selfCheckInstruction(): string {
   return `FINAL SELF-CHECK (do this silently before returning your answer — never show this reasoning in the output):

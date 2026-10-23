@@ -1,47 +1,47 @@
-// Central per-stage model/temperature configuration for the generation
-// pipeline. Every stage has different quality, reasoning, latency, and cost
-// requirements (see docs/prompt-architecture.md), so nothing here is
-// hardcoded in lib/claude.ts — it all resolves through here, overridable
-// per environment without touching code.
+// Central per-stage model configuration for the generation pipeline. Every
+// stage has different quality, reasoning, latency, and cost requirements
+// (see docs/prompt-architecture.md), so nothing here is hardcoded in
+// lib/claude.ts — it all resolves through here, overridable per environment
+// without touching code.
+//
+// No temperature here — Claude Opus 5 / Sonnet 5 reject non-default
+// temperature/top_p/top_k (400). The equivalent lever on Claude is per-stage
+// `thinking` (see shouldThinkForStage below), not sampling.
 
-export type PipelineStage = "generation" | "review" | "analysis" | "vocabulary";
+export type PipelineStage = "generation" | "review" | "analysis" | "vocabulary" | "prepositions";
 
 const MODEL_ENV_VARS: Record<PipelineStage, string> = {
   generation: "GENERATION_MODEL",
   review: "REVIEW_MODEL",
   analysis: "ANALYSIS_MODEL",
   vocabulary: "VOCABULARY_MODEL",
+  prepositions: "PREPOSITION_MODEL",
 };
 
-const TEMPERATURE_ENV_VARS: Record<PipelineStage, string> = {
-  generation: "GENERATION_TEMPERATURE",
-  review: "REVIEW_TEMPERATURE",
-  analysis: "ANALYSIS_TEMPERATURE",
-  vocabulary: "VOCABULARY_TEMPERATURE",
-};
-
-// Defaults preserve current behavior — all stages on gpt-4o-mini. Raise
-// GENERATION_MODEL to a stronger model via env var if you want to trial
-// whether that meaningfully improves educational quality; the codebase
-// already has first-party evidence (see lib/prepositionPrompt.ts) that mini
-// can misjudge German grammar, so this is a reasonable first knob to try.
+// Defaults: claude-sonnet-5 everywhere — near-Opus quality on this kind of
+// writing/judgment task, at a cost shape closer to this app's original
+// cost-conscious per-stage design than Opus would be. Raise any individual
+// stage to claude-opus-5 via its env var if quality ever warrants it.
 const DEFAULT_MODELS: Record<PipelineStage, string> = {
-  generation: "gpt-4o-mini",
-  review: "gpt-4o-mini",
-  analysis: "gpt-4o-mini",
-  vocabulary: "gpt-4o-mini",
+  generation: "claude-sonnet-5",
+  review: "claude-sonnet-5",
+  analysis: "claude-sonnet-5",
+  vocabulary: "claude-sonnet-5",
+  prepositions: "claude-sonnet-5",
 };
 
-// Generation: some sampling diversity helps wording variety (topic/scenario
-// diversity already comes from deterministic daily rotation, not sampling).
-// Review: a precision editing task — low temperature keeps corrections
-// conservative and repeatable. Analysis/vocabulary: classification tasks —
-// deliberately near-deterministic.
-const DEFAULT_TEMPERATURES: Record<PipelineStage, number> = {
-  generation: 0.65,
-  review: 0.3,
-  analysis: 0.1,
-  vocabulary: 0.1,
+// Generation/review/prepositions benefit from reasoning (naturalness
+// judgment, idiomatic-vs-grammatical calls, grammar correctness). Analysis
+// and vocabulary are pure classification against a fixed feature list —
+// thinking adds cost and risks eating into their small max_tokens budget
+// for no quality benefit, so they run with it explicitly disabled. This is
+// the replacement for the old low-temperature "deterministic" stages.
+const THINKING_STAGES: Record<PipelineStage, boolean> = {
+  generation: true,
+  review: true,
+  analysis: false,
+  vocabulary: false,
+  prepositions: true,
 };
 
 export function getModelForStage(stage: PipelineStage): string {
@@ -49,11 +49,8 @@ export function getModelForStage(stage: PipelineStage): string {
   return value && value.trim() ? value.trim() : DEFAULT_MODELS[stage];
 }
 
-export function getTemperatureForStage(stage: PipelineStage): number {
-  const raw = process.env[TEMPERATURE_ENV_VARS[stage]];
-  if (raw === undefined || raw.trim() === "") return DEFAULT_TEMPERATURES[stage];
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 2 ? parsed : DEFAULT_TEMPERATURES[stage];
+export function shouldThinkForStage(stage: PipelineStage): boolean {
+  return THINKING_STAGES[stage];
 }
 
 // The vocabulary analyzer is the optional stage in the pipeline diagram —
