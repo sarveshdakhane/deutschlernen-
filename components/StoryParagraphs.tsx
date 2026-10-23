@@ -8,7 +8,7 @@ export default function StoryParagraphs({ paragraphs }: Props) {
       {paragraphs.map((text, i) => (
         <p
           key={i}
-          className="text-[17px] sm:text-[18px] leading-[1.85] sm:leading-[1.9] text-gray-800 text-left sm:text-justify hyphens-none"
+          className="text-[17px] sm:text-[18px] leading-[1.85] sm:leading-[1.9] text-slate-200 text-left sm:text-justify hyphens-none"
           lang="de"
         >
           {text}

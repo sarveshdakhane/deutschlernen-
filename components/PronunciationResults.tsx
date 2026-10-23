@@ -15,7 +15,7 @@ function highlight(text: string, word: string) {
   // split() with a capturing group alternates [non-match, match, non-match, ...]
   return parts.map((part, i) =>
     i % 2 === 1 ? (
-      <mark key={i} className="bg-yellow-100 text-gray-900 rounded px-0.5">
+      <mark key={i} className="bg-yellow-400/30 text-yellow-100 rounded px-0.5">
         {part}
       </mark>
     ) : (
@@ -33,11 +33,11 @@ export default function PronunciationResults({ word, clips, selectedIndex, onSel
             onClick={() => onSelect(i)}
             className={`w-full text-left p-3 rounded-xl border transition-colors ${
               i === selectedIndex
-                ? "border-blue-300 bg-blue-50"
-                : "border-gray-200 bg-white hover:border-gray-300"
+                ? "border-blue-400 bg-blue-500/10"
+                : "border-slate-700 bg-slate-800 hover:border-slate-500"
             }`}
           >
-            <p className="text-sm text-gray-800 line-clamp-2">{highlight(clip.text, word)}</p>
+            <p className="text-sm text-slate-200 line-clamp-2">{highlight(clip.text, word)}</p>
           </button>
         </li>
       ))}

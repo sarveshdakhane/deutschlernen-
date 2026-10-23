@@ -10,17 +10,17 @@ function Question({ q, index }: { q: QuizQuestion; index: number }) {
 
   const getStyle = (i: number) => {
     if (selected === null) {
-      return "border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50 cursor-pointer";
+      return "border-slate-700 bg-slate-800 hover:border-blue-400 hover:bg-blue-500/10";
     }
-    if (i === q.answer) return "border-green-400 bg-green-50 text-green-800";
-    if (i === selected) return "border-red-300 bg-red-50 text-red-700";
-    return "border-gray-100 bg-gray-50 text-gray-400";
+    if (i === q.answer) return "border-green-500/60 bg-green-500/10 text-green-300";
+    if (i === selected) return "border-red-500/60 bg-red-500/10 text-red-300";
+    return "border-slate-800 bg-slate-800/50 text-slate-500";
   };
 
   return (
     <div>
-      <p className="text-sm font-medium text-gray-800 mb-3">
-        <span className="text-gray-400 mr-1">{index + 1}.</span> {q.question}
+      <p className="text-sm font-medium text-slate-200 mb-3">
+        <span className="text-slate-500 mr-1">{index + 1}.</span> {q.question}
       </p>
       <div className="space-y-2">
         {q.options.map((option, i) => (
@@ -28,21 +28,21 @@ function Question({ q, index }: { q: QuizQuestion; index: number }) {
             key={i}
             disabled={selected !== null}
             onClick={() => setSelected(i)}
-            className={`w-full text-left flex items-start gap-3 px-4 py-3.5 rounded-xl border text-sm transition-all ${getStyle(i)}`}
+            className={`w-full text-left flex items-start gap-3 px-4 py-3.5 rounded-xl border text-sm transition-all cursor-pointer disabled:cursor-default ${getStyle(i)}`}
           >
             <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold border mt-0.5
-              ${selected === null ? "border-gray-300 text-gray-500" :
+              ${selected === null ? "border-slate-600 text-slate-400" :
                 i === q.answer ? "border-green-500 bg-green-500 text-white" :
-                i === selected ? "border-red-400 bg-red-400 text-white" :
-                "border-gray-200 text-gray-400"}`}>
+                i === selected ? "border-red-500 bg-red-500 text-white" :
+                "border-slate-700 text-slate-500"}`}>
               {LETTERS[i]}
             </span>
             <span className="leading-relaxed">{option}</span>
             {selected !== null && i === q.answer && (
-              <span className="ml-auto flex-shrink-0 text-green-600 text-xs font-semibold self-center">✓ correct</span>
+              <span className="ml-auto flex-shrink-0 text-green-400 text-xs font-semibold self-center">✓ correct</span>
             )}
             {selected === i && i !== q.answer && (
-              <span className="ml-auto flex-shrink-0 text-red-500 text-xs font-semibold self-center">✗ wrong</span>
+              <span className="ml-auto flex-shrink-0 text-red-400 text-xs font-semibold self-center">✗ wrong</span>
             )}
           </button>
         ))}
@@ -60,8 +60,8 @@ export default function QuizSection({ questions }: Props) {
 
   return (
     <div>
-      <h3 className="text-base font-semibold text-gray-900 mb-1">Reading Quiz</h3>
-      <p className="text-xs text-gray-400 mb-5">Choose the best answer for each question.</p>
+      <h3 className="text-base font-semibold text-slate-100 mb-1">Reading Quiz</h3>
+      <p className="text-xs text-slate-500 mb-5">Choose the best answer for each question.</p>
       <div className="space-y-7">
         {questions.map((q, i) => (
           <Question key={i} q={q} index={i} />

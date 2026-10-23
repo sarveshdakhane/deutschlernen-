@@ -3,21 +3,17 @@
 import Link from "next/link";
 
 export default function Header() {
-  const handleHome = () => {
-    window.dispatchEvent(new CustomEvent("todays-read-home"));
-  };
-
   return (
-    <header className="border-b border-gray-100 bg-white print:hidden sticky top-0 z-30">
+    <header className="border-b border-slate-800 bg-slate-900 print:hidden sticky top-0 z-30">
       <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
-        <Link href="/" onClick={handleHome} className="text-gray-900 font-semibold text-base sm:text-lg tracking-tight hover:text-gray-600 transition-colors">
+        <Link href="/" className="text-slate-100 font-semibold text-base sm:text-lg tracking-tight hover:text-slate-300 transition-colors">
           Daily Deutsch
         </Link>
         <div className="flex items-center gap-5">
-          <Link href="/praepositionen" className="text-sm text-gray-500 hover:text-gray-900 transition-colors font-medium">
+          <Link href="/praepositionen" className="text-sm text-slate-400 hover:text-slate-100 transition-colors font-medium">
             Präpositionen
           </Link>
-          <Link href="/archive" className="text-sm text-gray-500 hover:text-gray-900 transition-colors font-medium">
+          <Link href="/archive" className="text-sm text-slate-400 hover:text-slate-100 transition-colors font-medium">
             Past Reads
           </Link>
         </div>

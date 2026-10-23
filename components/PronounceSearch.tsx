@@ -90,11 +90,11 @@ export default function PronounceSearch({ compact = false }: Props) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="e.g. Quittung"
-          className="flex-1 min-w-0 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300"
+          className="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400"
         />
         <button
           type="submit"
-          className="bg-gray-900 text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-gray-700 transition-colors"
+          className="bg-slate-100 text-slate-900 text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-white transition-colors"
         >
           Search
         </button>
@@ -105,8 +105,8 @@ export default function PronounceSearch({ compact = false }: Props) {
       {!loading && error && <ErrorState message={error} onRetry={() => word && search(word)} />}
 
       {!loading && !streaming && !error && word && clips.length === 0 && (
-        <div className={`text-center border border-dashed border-gray-200 rounded-2xl ${compact ? "py-8" : "py-16"}`}>
-          <p className="text-gray-400 text-sm">No spoken examples found for &quot;{word}&quot;.</p>
+        <div className={`text-center border border-dashed border-slate-700 rounded-2xl ${compact ? "py-8" : "py-16"}`}>
+          <p className="text-slate-500 text-sm">No spoken examples found for &quot;{word}&quot;.</p>
         </div>
       )}
 
@@ -119,7 +119,7 @@ export default function PronounceSearch({ compact = false }: Props) {
             selectedIndex={selectedIndex}
             onSelect={setSelectedIndex}
           />
-          {streaming && <p className="text-center text-xs text-gray-300">Loading more examples…</p>}
+          {streaming && <p className="text-center text-xs text-slate-500">Loading more examples…</p>}
         </div>
       )}
     </div>

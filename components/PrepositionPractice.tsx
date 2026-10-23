@@ -12,13 +12,13 @@ function SentenceWithBlank({ sentence, filled, correct }: { sentence: string; fi
   }, [sentence]);
 
   const blankStyle = !filled
-    ? "border-gray-300 text-gray-300"
+    ? "border-slate-600 text-slate-500"
     : correct
-    ? "border-green-500 text-green-700 bg-green-50"
-    : "border-red-400 text-red-700 bg-red-50";
+    ? "border-green-500 text-green-300 bg-green-500/10"
+    : "border-red-500 text-red-300 bg-red-500/10";
 
   return (
-    <p className="text-base sm:text-lg text-gray-900 leading-relaxed">
+    <p className="text-base sm:text-lg text-slate-100 leading-relaxed">
       {before}
       <span className={`inline-block px-2 py-0.5 mx-1 rounded-lg border-b-2 font-semibold ${blankStyle}`}>
         {filled ?? "___"}
@@ -52,16 +52,16 @@ function Question({ q, index, total, onAnswered }: { q: PrepositionQuestion; ind
 
   const getStyle = (originalIndex: number) => {
     if (selected === null) {
-      return "border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50 cursor-pointer";
+      return "border-slate-700 bg-slate-800 hover:border-blue-400 hover:bg-blue-500/10 cursor-pointer";
     }
-    if (originalIndex === q.answer) return "border-green-400 bg-green-50 text-green-800";
-    if (originalIndex === selected) return "border-red-300 bg-red-50 text-red-700";
-    return "border-gray-100 bg-gray-50 text-gray-400";
+    if (originalIndex === q.answer) return "border-green-500/60 bg-green-500/10 text-green-300";
+    if (originalIndex === selected) return "border-red-500/60 bg-red-500/10 text-red-300";
+    return "border-slate-800 bg-slate-800/50 text-slate-500";
   };
 
   return (
-    <div className="border border-gray-100 rounded-2xl p-4 sm:p-5 bg-white">
-      <p className="text-xs font-semibold text-gray-400 mb-2">Satz {index + 1} / {total}</p>
+    <div className="border border-slate-800 rounded-2xl p-4 sm:p-5 bg-slate-800/60">
+      <p className="text-xs font-semibold text-slate-500 mb-2">Satz {index + 1} / {total}</p>
       <SentenceWithBlank
         sentence={q.sentence}
         filled={selected !== null ? q.options[selected] : null}
@@ -78,10 +78,10 @@ function Question({ q, index, total, onAnswered }: { q: PrepositionQuestion; ind
           >
             <span
               className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold border
-                ${selected === null ? "border-gray-300 text-gray-500" :
+                ${selected === null ? "border-slate-600 text-slate-400" :
                   originalIndex === q.answer ? "border-green-500 bg-green-500 text-white" :
-                  originalIndex === selected ? "border-red-400 bg-red-400 text-white" :
-                  "border-gray-200 text-gray-400"}`}
+                  originalIndex === selected ? "border-red-500 bg-red-500 text-white" :
+                  "border-slate-700 text-slate-500"}`}
             >
               {LETTERS[displayIndex]}
             </span>
@@ -91,7 +91,7 @@ function Question({ q, index, total, onAnswered }: { q: PrepositionQuestion; ind
       </div>
 
       {selected !== null && q.translation && (
-        <p className="text-xs text-gray-400 mt-3 italic">{q.translation}</p>
+        <p className="text-xs text-slate-500 mt-3 italic">{q.translation}</p>
       )}
     </div>
   );
@@ -117,12 +117,12 @@ export default function PrepositionPractice({ questions }: Props) {
   return (
     <div>
       {allAnswered && (
-        <div className="mb-6 border border-gray-200 rounded-2xl px-5 py-4 bg-white flex items-center justify-between">
+        <div className="mb-6 border border-slate-700 rounded-2xl px-5 py-4 bg-slate-800 flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-gray-900">Ergebnis</p>
-            <p className="text-xs text-gray-400 mt-0.5">Du hast heute alle Sätze beantwortet.</p>
+            <p className="text-sm font-semibold text-slate-100">Ergebnis</p>
+            <p className="text-xs text-slate-500 mt-0.5">Du hast heute alle Sätze beantwortet.</p>
           </div>
-          <p className="text-lg font-bold text-gray-900">
+          <p className="text-lg font-bold text-slate-100">
             {correctCount} / {questions.length}
           </p>
         </div>

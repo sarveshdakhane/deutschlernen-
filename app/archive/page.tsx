@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Story, ReadingType } from "@/lib/types";
-import StoryView from "@/components/StoryView";
 
 const TYPE_CONFIG: Record<ReadingType, { label: string; icon: string; bg: string; text: string }> = {
-  news:     { label: "Nachrichten", icon: "📰", bg: "bg-blue-50",   text: "text-blue-700" },
-  dialogue: { label: "Gespräch",    icon: "💬", bg: "bg-violet-50", text: "text-violet-700" },
-  story:    { label: "Geschichte",  icon: "📖", bg: "bg-emerald-50",text: "text-emerald-700" },
-  speaking: { label: "A2 Sprechen", icon: "🗣️", bg: "bg-orange-50", text: "text-orange-700" },
+  news:     { label: "Nachrichten", icon: "📰", bg: "bg-blue-500/10",    text: "text-blue-300" },
+  dialogue: { label: "Gespräch",    icon: "💬", bg: "bg-violet-500/10",  text: "text-violet-300" },
+  story:    { label: "Geschichte",  icon: "📖", bg: "bg-emerald-500/10", text: "text-emerald-300" },
+  speaking: { label: "A2 Sprechen", icon: "🗣️", bg: "bg-orange-500/10",  text: "text-orange-300" },
 };
 
 type ArchiveEntry = { date: string };
@@ -25,16 +25,16 @@ function formatDropdownDate(iso: string) {
   });
 }
 
-function ReadingGrid({ readings, onSelect }: { readings: Story[]; onSelect: (s: Story) => void }) {
+function ReadingGrid({ readings }: { readings: Story[] }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:gap-4">
       {readings.map((reading) => {
         const cfg = TYPE_CONFIG[reading.readingType];
         return (
-          <button
+          <Link
             key={reading.slug}
-            onClick={() => onSelect(reading)}
-            className="text-left bg-white border border-gray-200 rounded-2xl hover:border-gray-300 hover:shadow-md transition-all group flex flex-col overflow-hidden"
+            href={`/read/${reading.date}/${reading.slug}`}
+            className="text-left bg-slate-800 border border-slate-700 rounded-2xl hover:border-slate-500 hover:shadow-md transition-all group flex flex-col overflow-hidden"
           >
             {reading.imageUrl && (
               <img src={reading.imageUrl} alt={reading.topic} className="w-full h-32 sm:h-36 object-cover" />
@@ -44,15 +44,15 @@ function ReadingGrid({ readings, onSelect }: { readings: Story[]; onSelect: (s: 
                 <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}>
                   <span>{cfg.icon}</span>{cfg.label}
                 </span>
-                <span className="text-xs text-gray-400">{reading.difficulty}</span>
+                <span className="text-xs text-slate-500">{reading.difficulty}</span>
               </div>
-              <h2 className="text-sm sm:text-base font-semibold text-gray-900 leading-snug mb-1.5 group-hover:text-blue-700 transition-colors flex-1">
+              <h2 className="text-sm sm:text-base font-semibold text-slate-100 leading-snug mb-1.5 group-hover:text-blue-300 transition-colors flex-1">
                 {reading.title}
               </h2>
-              <p className="text-xs text-gray-500 line-clamp-1">{reading.topic}</p>
-              <p className="text-xs text-gray-400 mt-3 font-medium group-hover:text-blue-600 transition-colors">Lesen →</p>
+              <p className="text-xs text-slate-400 line-clamp-1">{reading.topic}</p>
+              <p className="text-xs text-slate-500 mt-3 font-medium group-hover:text-blue-300 transition-colors">Lesen →</p>
             </div>
-          </button>
+          </Link>
         );
       })}
     </div>
@@ -63,12 +63,12 @@ function LoadingSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-3 sm:gap-4">
       {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="bg-white border border-gray-200 rounded-2xl overflow-hidden animate-pulse">
-          <div className="h-32 sm:h-36 bg-gray-100" />
+        <div key={i} className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden animate-pulse">
+          <div className="h-32 sm:h-36 bg-slate-700/50" />
           <div className="p-4 sm:p-5">
-            <div className="h-3 w-20 bg-gray-100 rounded-full mb-3" />
-            <div className="h-4 w-full bg-gray-100 rounded-full mb-2" />
-            <div className="h-4 w-3/4 bg-gray-100 rounded-full" />
+            <div className="h-3 w-20 bg-slate-700/50 rounded-full mb-3" />
+            <div className="h-4 w-full bg-slate-700/50 rounded-full mb-2" />
+            <div className="h-4 w-3/4 bg-slate-700/50 rounded-full" />
           </div>
         </div>
       ))}
@@ -83,8 +83,6 @@ export default function ArchivePage() {
   const [selectedEntry, setSelectedEntry] = useState<ArchiveEntry | null>(null);
   const [readings, setReadings] = useState<Story[]>([]);
   const [readingsLoading, setReadingsLoading] = useState(false);
-
-  const [selectedStory, setSelectedStory] = useState<Story | null>(null);
 
   // Load available archive dates
   useEffect(() => {
@@ -112,30 +110,20 @@ export default function ArchivePage() {
       .finally(() => setReadingsLoading(false));
   }, [selectedEntry]);
 
-  if (selectedStory) {
-    return (
-      <StoryView
-        key={selectedStory.slug}
-        story={selectedStory}
-        onBack={() => setSelectedStory(null)}
-      />
-    );
-  }
-
   return (
     <main className="max-w-2xl mx-auto px-4 py-8 sm:py-10">
 
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Past Reads</h1>
-        <p className="text-sm text-gray-400 mt-1">Browse previous daily reading editions</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-100">Past Reads</h1>
+        <p className="text-sm text-slate-500 mt-1">Browse previous daily reading editions</p>
       </div>
 
       {/* No archive yet */}
       {!datesLoading && dates.length === 0 && (
-        <div className="border border-dashed border-gray-200 rounded-2xl py-16 text-center">
-          <p className="text-sm font-medium text-gray-500">No past readings yet</p>
-          <p className="text-xs text-gray-400 mt-1">Past editions will appear here from tomorrow onwards.</p>
+        <div className="border border-dashed border-slate-700 rounded-2xl py-16 text-center">
+          <p className="text-sm font-medium text-slate-300">No past readings yet</p>
+          <p className="text-xs text-slate-500 mt-1">Past editions will appear here from tomorrow onwards.</p>
         </div>
       )}
 
@@ -144,7 +132,7 @@ export default function ArchivePage() {
         <>
           {/* Dropdown */}
           <div className="mb-6">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
               Select a date
             </label>
             <div className="relative">
@@ -154,7 +142,7 @@ export default function ArchivePage() {
                   const entry = dates.find((d) => d.date === e.target.value);
                   if (entry) setSelectedEntry(entry);
                 }}
-                className="w-full appearance-none bg-white border border-gray-200 rounded-xl px-4 py-3 pr-10 text-sm font-medium text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent cursor-pointer"
+                className="w-full appearance-none bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 pr-10 text-sm font-medium text-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-transparent cursor-pointer"
               >
                 {dates.map((entry) => (
                   <option key={entry.date} value={entry.date}>
@@ -164,13 +152,13 @@ export default function ArchivePage() {
               </select>
               {/* Dropdown arrow */}
               <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
             </div>
             {selectedEntry && (
-              <p className="text-xs text-gray-400 mt-2">{formatDate(selectedEntry.date)}</p>
+              <p className="text-xs text-slate-500 mt-2">{formatDate(selectedEntry.date)}</p>
             )}
           </div>
 
@@ -178,12 +166,12 @@ export default function ArchivePage() {
           {readingsLoading && <LoadingSkeleton />}
 
           {!readingsLoading && readings.length > 0 && (
-            <ReadingGrid readings={readings} onSelect={setSelectedStory} />
+            <ReadingGrid readings={readings} />
           )}
 
           {!readingsLoading && readings.length === 0 && selectedEntry && (
-            <div className="border border-dashed border-gray-200 rounded-2xl py-10 text-center">
-              <p className="text-sm text-gray-400">Could not load readings for this date.</p>
+            <div className="border border-dashed border-slate-700 rounded-2xl py-10 text-center">
+              <p className="text-sm text-slate-500">Could not load readings for this date.</p>
             </div>
           )}
         </>

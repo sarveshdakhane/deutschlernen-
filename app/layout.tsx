@@ -92,8 +92,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="de" className={`${geist.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-gray-50">
+    <html lang="de" className={`${geist.variable} h-full antialiased dark`}>
+      <body className="min-h-full flex flex-col bg-slate-900 text-slate-200">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -102,8 +102,8 @@ export default function RootLayout({
         />
         <Header />
         <div className="flex-1">{children}</div>
-        <footer className="border-t border-gray-100 bg-white mt-8 print:hidden">
-          <div className="max-w-6xl mx-auto px-4 py-4 text-center text-xs text-gray-400">
+        <footer className="border-t border-slate-800 bg-slate-900 mt-8 print:hidden">
+          <div className="max-w-6xl mx-auto px-4 py-4 text-center text-xs text-slate-500">
             Daily Deutsch
           </div>
         </footer>
