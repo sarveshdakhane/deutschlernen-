@@ -21,6 +21,32 @@ A sentence can be 100% grammatically correct and still fail on naturalness, freq
   );
 }
 
+// story/news get four extra editorial dimensions on top of the shared
+// eight — reusing this same review call rather than a dedicated 5th Claude
+// call, since the reviewer already reads the full text closely. Gated by
+// type: a scripted dialogue/speaking exchange has no real "curiosity hook"
+// or "factual integrity" to assess the way a story/news piece does.
+const CONTENT_QUALITY_TYPES: ReadingType[] = ["story", "news"];
+
+function contentQualityInstructions(type: ReadingType): string {
+  if (!CONTENT_QUALITY_TYPES.includes(type)) return "";
+  return `
+Also grade these four dimensions, specific to ${type} content, 0.0–1.0:
+- curiosity: does the opening give the reader a genuine reason to keep reading (a hook, a question, a surprise), as opposed to a flat, generic start?
+- specificity: does the piece contain concrete, memorable, specific details rather than generic filler?
+- coherence: do the events, motivations, and ending actually make sense together?
+- factualIntegrity: if the piece presents itself as true (history/real event/explainer), is every specific claim plausibly supported by what a careful, honest writer would actually know — i.e. no invented names, dates, statistics, or quotations presented as fact? Score 1.0 if the piece is clearly fictional and never claims to be true (factual integrity isn't being tested), or if it's factual and makes no unsupported specific claims. Score low if it's presented as real but contains invented specifics that read as fabricated facts.`;
+}
+
+function contentQualitySchema(type: ReadingType): string {
+  if (!CONTENT_QUALITY_TYPES.includes(type)) return "";
+  return `,
+    "curiosity": 0.0,
+    "specificity": 0.0,
+    "coherence": 0.0,
+    "factualIntegrity": 0.0`;
+}
+
 export function buildReviewUserPrompt(
   text: string,
   type: ReadingType,
@@ -57,6 +83,7 @@ After editing, grade the FINAL (post-edit) text you are returning on each dimens
 - cefrConsistency: vocabulary and grammar complexity match the stated ${difficulty} level
 - translationInterference: 0.0 = no English-influenced phrasing detected, 1.0 = heavy literal-translation feel (this one is inverted — lower is better)
 - confidence: how confident you are in these scores given the length and complexity of the text
+${contentQualityInstructions(type)}
 
 Return valid JSON only, in this exact structure, with no markdown and no explanation outside the JSON:
 {
@@ -69,7 +96,7 @@ Return valid JSON only, in this exact structure, with no markdown and no explana
     "register": 0.0,
     "cefrConsistency": 0.0,
     "translationInterference": 0.0,
-    "confidence": 0.0
+    "confidence": 0.0${contentQualitySchema(type)}
   }
 }`;
 }

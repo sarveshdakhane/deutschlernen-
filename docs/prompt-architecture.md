@@ -34,14 +34,22 @@ contradict it.
 ## Pipeline
 
 ```
+Topic selection (per date, all 4 types at once)
+  lib/topicSelection.server.ts: pickDailyTopics(bucket, date)
+    loads shared history (R2) → deterministic seeded pick per type,
+    excluding recent-use ids (14-21 day window) and categories already
+    picked by another type the same day — see "Topic selection &
+    diversity" below
+
 Notion (optional, both fail soft)
   topic queue                 lib/notion.server.ts: queryQueuedEntry(type)
-                               oldest "Ready" row for this type, if any
+                               oldest "Ready" row for this type, if any —
+                               takes priority over the pool pick above
   vocabulary recap            lib/vocabCooldown.server.ts: pickVocabularyForReading()
                                words from the Vocab page not in cooldown
         │
         ▼
-Prompt Builder                lib/storyPrompt.ts: buildPromptForType(type, topicOverride?, targetVocabulary?)
+Prompt Builder                lib/storyPrompt.ts: buildPromptForType(type, topicOverride?, targetVocabulary?, topicItem?)
         │
         ▼
 Generator                     runGenerationCall()        [1st Claude call]
@@ -63,7 +71,13 @@ Validator                     validateContentQuality()    fast, non-LLM checks:
                                                            "Name: text" dialogue
                                                            — runs BEFORE analysis
                                                            so a bad review never
-                                                           burns an analysis call
+                                                           burns an analysis call.
+                                                           Steps 1-3 above (generate
+                                                           → review → validate) are
+                                                           bounded-retried as a unit
+                                                           (max 2 attempts) if this
+                                                           throws — see "Retry
+                                                           behavior" below.
         │
         ▼
 Grammar Analyzer              runAnalysisPass()           [3rd Claude call]
@@ -79,6 +93,7 @@ Vocabulary Analyzer (optional) runVocabularyPass()        [4th Claude call,
         │
         ▼
 Frontend                      Story JSON, cached to R2 (lib/storage.server.ts)
+                               (topic history also recorded to R2 — see below)
 ```
 
 If a Notion topic entry or vocabulary words were consumed, they're only
@@ -101,14 +116,128 @@ throws, that one type falls back to the hand-written sample in
 internally instead — a hiccup in editing, grammar-tagging, or vocabulary
 checking never throws away an otherwise-good generation.
 
+## Topic selection & diversity
+
+Replaced the old `day-count % pool.length` rotation (used through
+`PROMPT_VERSION` 2.2.0) — 100% predictable, repeated on a short fixed cycle
+per type (10/20/18/30 days), and each type picked independently with no
+awareness of the other three.
+
+- **`lib/topicPools.ts`** — pure data. One shared `TopicItem` type
+  (`id`, `category`, `premise`, optional `factuality`/`format`/`setting`/
+  `centralConflict`/`emotionalTone`/`purpose`/`verifiedBackground`) and four
+  pools: `STORY_POOL` (concrete premises across 12 categories — real
+  historical events, curious facts, science, human interest, social trends,
+  regional traditions, travel, relationships, everyday decisions, mystery,
+  personal dilemmas, light humour — the majority non-fiction by design),
+  `NEWS_POOL` (evergreen, verifiable explainer angles — see "Content
+  authenticity" below), `DIALOGUE_POOL` (B1, tagged by communicative
+  purpose/conflict/tone), `SPEAKING_POOL` (A2, organized around 15
+  communicative purposes — asking for information, declining politely,
+  giving advice, apologizing, etc. — rather than mostly service-counter
+  settings).
+- **`lib/topicSelection.ts`** — pure algorithm, no I/O
+  (`tests/pipeline/topicSelection.test.ts`). `selectTopic(pool, seed,
+  options)` picks deterministically via a seeded string hash (FNV-1a-style,
+  `seededIndex()`) over whatever the pool looks like after excluding (a)
+  items used within `windowDays` (default 18) for this reading type and (b)
+  categories already picked by another type the same day. Both exclusions
+  relax independently rather than ever failing to produce a pick — a
+  diversity feature must never be able to block generation.
+- **`lib/topicSelection.server.ts`** — R2-backed glue, same shape as
+  `lib/vocabCooldown.server.ts`. `pickDailyTopics(bucket, date)` loads one
+  shared history record (`topic-history.json`) and computes all 4 types'
+  picks **synchronously, in one call**, before any generation starts — so
+  the 4 types never race each other over history (they're all in the same
+  Durable Object invocation; see `workers/generationCoordinator.ts`).
+  `recordTopicSelections()` writes the day's picks back using
+  etag-conditional writes with bounded retry
+  (`getJsonWithEtag`/`putJsonIfMatch` in `lib/storage.server.ts`) — the real
+  race is *between* two different dates' DO instances (e.g. today's
+  on-demand request and tomorrow's cron prefetch) touching the same shared
+  record around the same time, not within one date's generation. Fails
+  soft throughout: a history read/write error never blocks generation, it
+  just means slightly weaker diversity until the next successful write.
+- `topicItem` flows into `buildPromptForType()` as a 4th, optional
+  parameter alongside the existing `topicOverride` string — a Notion queue
+  entry (plain string) still takes priority over a pool pick when both
+  could apply (see "Notion integration" below); a bare `build*Prompt()`
+  call with neither still works, falling back to a synchronous,
+  zero-history `selectTopic()` call internally (deterministic, just without
+  the recency/cross-type bias) — this keeps every builder's existing
+  signature-compatible and testable without R2.
+- `Story["meta"]` now optionally carries `topicId`/`topicCategory` when a
+  pool pick (not a Notion override) produced the reading — internal/debug
+  only, same as the rest of `meta`, never exposed in the UI.
+
+## Content authenticity (news & story factuality)
+
+Every `TopicItem` can carry a `factuality`: `"fiction"`, `"history"`, or
+`"verified_fact"`. This directly shapes what the generator is told it may
+and may not invent (`factualitySection()` in `lib/storyPrompt.ts`):
+
+- **`"history"`** — a real, specific past event. The item supplies
+  `verifiedBackground`: a short list of true facts written by a human (not
+  generated), which the model must treat as its factual anchor — it may
+  narrate and add ordinary scene-setting color, but must not invent
+  additional names, dates, statistics, or quotations beyond what's given.
+- **`"verified_fact"`** — a real, general/structural subject (how a system
+  works, a well-known cultural fact) rather than a specific dated event.
+  Same anchor-don't-invent framing, looser because there's no single event
+  to misstate.
+- **`"fiction"`** — explicitly labeled as invented to the model, and never
+  attributed to real people/companies/institutions.
+
+**News specifically** no longer asks the model to invent "a specific,
+realistic news event... that could plausibly be a top news story around
+{today}" with an invented attributed quote — that was fabricating fake news
+by construction. `NEWS_POOL` is now evergreen explainer angles (how a law
+actually passes the Bundestag, how statutory health insurance is funded,
+the real history of the minimum wage) framed as background journalism, not
+breaking-news reporting, and the prompt explicitly forbids inventing direct
+quotations attributed to named officials/spokespeople. A Notion-overridden
+news topic gets the same caution — the override is a one-line topic string,
+not a source document, so there's still nothing to verify quotes against.
+
+**Important limitation, stated plainly**: there is no live web-search or
+news-API integration in this pipeline. "Verified" here means
+*human-supplied* verified background baked into the pool data at
+write-time, not live source-checking at generation-time. If a specific
+real-world current event is wanted, the existing Notion content queue is
+the correct channel — a human pastes in a real, already-verified topic,
+and the news prompt still won't fabricate quotes/specifics beyond it. Wiring
+up Claude's server-side web-search tool was considered and deliberately
+deferred — it would change `callChatJson()`'s single-shot
+request/response shape into a multi-turn tool-use loop, which is a real
+pipeline architecture change, not a prompt change; worth a dedicated pass
+if genuine live-news sourcing becomes a priority.
+
+## Retry behavior
+
+`generateOneReadingWithDiagnostics()` bounded-retries steps 1-3 (generate →
+review → structural validate) as a unit, up to `MAX_GENERATION_ATTEMPTS = 2`
+total attempts, when `validateStory()` or `validateContentQuality()` throws
+(missing JSON fields, empty text, duplicated paragraphs, malformed
+`"Name: text"` dialogue format) or a Claude call itself throws (transient
+API error). This did not exist before this pass — previously, any one of
+these failures fell straight through to `generateDailyReadingsCore()`'s
+existing static-sample fallback with zero retries. The bound is small and
+explicit specifically so this can never become an unbounded loop; on a
+second failure, the existing sample fallback still applies exactly as
+before.
+
+The new review-quality dimensions below (curiosity/specificity/coherence/
+factualIntegrity) deliberately do **not** trigger a retry — see "Quality
+score" below for why.
+
 ## Notion integration
 
-Two independent, optional Notion sources feed into generation instead of the
-deterministic day-indexed rotation hardcoded in `lib/storyPrompt.ts`. Both
+Two independent, optional Notion sources feed into generation alongside the
+pool-based topic selection in `lib/topicSelection.server.ts` above. Both
 fail soft: if the relevant env vars aren't set, or the Notion API call fails
 for any reason, the corresponding function returns `null`/`[]` and the
-existing deterministic rotation/plain generation takes over exactly as if
-the feature didn't exist.
+pool-based selection/plain generation takes over exactly as if the feature
+didn't exist.
 
 Uses the Notion REST API directly via `fetch` (the `data-sources` query
 endpoint, not the deprecated `databases` one, for the topic queue; the
@@ -234,13 +363,31 @@ merely grammatically acceptable.
 
 ## Quality score (internal only)
 
-The review stage also grades the text it hands back on 8 dimensions —
+The review stage also grades the text it hands back on 8 shared dimensions —
 `grammar`, `naturalness`, `idiomaticity`, `pragmatics`, `register`,
 `cefrConsistency`, `translationInterference` (inverted: lower is better),
 and `confidence` — each `0.0`–`1.0` (see `QualityScore` in `lib/types.ts`).
 
-**This is never attached to a `Story` object or returned by the API.** It
-flows through two internal-only channels:
+**story and news additionally get 4 content-quality dimensions** (same
+review call, no extra API call — `CONTENT_QUALITY_TYPES` in
+`lib/prompts/reviewPrompt.ts`): `curiosity` (does the opening earn the
+read), `specificity` (concrete detail vs. filler), `coherence` (do events/
+motivations/ending actually hang together), and `factualIntegrity` (for
+content presented as true, are specific claims plausibly supported rather
+than invented). dialogue/speaking reviews never populate these — they're
+`undefined` for those types, not `0`.
+
+**None of this is calibrated yet.** The 4 new dimensions are logged
+(same two channels as below) but deliberately **do not gate anything** —
+there's no real score-distribution data to justify a numeric cutoff, the
+same caution that's applied to the original 8 dimensions' `0.6` smoke-test
+floor in `liveGeneration.test.ts` since that test was first written. What
+*does* gate now is the bounded retry on structural validation failures
+(see "Retry behavior" above) — that's evidence-backed (documented
+production failure modes), not a fuzzy threshold.
+
+**Quality scores are never attached to a `Story` object or returned by the
+API.** They flow through two internal-only channels:
 1. `lib/promptDebugLog.server.ts`, gated by `DEBUG_PROMPT_LOGGING` (off by
    default).
 2. The live prompt regression suite (`tests/prompts/liveGeneration.test.ts`),
@@ -256,11 +403,13 @@ Every generated `Story` carries an optional `meta` field
 
 ```ts
 {
-  promptVersion: "2.1.0",       // lib/prompts/shared.ts — bump on prompt edits
+  promptVersion: "2.3.0",       // lib/prompts/shared.ts — bump on prompt edits
   generationModel: "claude-sonnet-5",
   reviewModel: "claude-sonnet-5",
   analysisModel: "claude-sonnet-5",
   generatedAt: "2026-07-18T12:00:00.000Z",
+  topicId: "story-oktoberfest-origin",   // optional — absent on Notion-overridden topics
+  topicCategory: "regional-traditions",  // optional, same condition
 }
 ```
 
@@ -336,6 +485,13 @@ From profiling the pipeline structure (not a live load test):
   `lib/prompts/shared.ts`, not to an individual `build*Prompt` function.
 - New per-type content requirements → edit the relevant `build*Prompt`
   function in `lib/storyPrompt.ts` only.
+- New story/news/dialogue/speaking topic items → add to the relevant pool
+  in `lib/topicPools.ts`, give each a stable, never-reused `id` (it's the
+  recent-use history key), and for `factuality: "history"` /
+  `"verified_fact"` items, write `verifiedBackground` yourself — never let
+  the model (or a future web-search integration) auto-populate this field
+  without a human review step; that's the whole point of the authenticity
+  guarantee described above.
 - New grammar features to track → add them to both the schema comment in
   `lib/prompts/analysisPrompt.ts` and the `Story["grammarChecklist"]` type in
   `lib/types.ts`, and to the boolean-coercion block in `runAnalysisPass()`
@@ -370,8 +526,32 @@ From profiling the pipeline structure (not a live load test):
 
 ## Known limitations / follow-ups
 
-- **Latency/cost**: 3–4 sequential Claude calls per reading type. Consider
-  this before enabling the optional vocabulary stage broadly.
+- **No live source verification for news/history content** — see "Content
+  authenticity" above. `verifiedBackground` is human-written pool data, not
+  a live fact-check. Real-time news sourcing (e.g. Claude's server-side
+  web-search tool) was deliberately deferred — it's a pipeline architecture
+  change (multi-turn tool use vs. `callChatJson()`'s single-shot
+  request/response), not a prompt change, and was out of scope for this
+  pass per the explicit instruction not to add a web-search dependency
+  without considering the implications.
+- **Content-quality dimensions (curiosity/specificity/coherence/
+  factualIntegrity) are observability-only** — logged, not gating, same as
+  the original 8 dimensions always have been pending real score-distribution
+  data. If/when enough `test:live` runs or production logs exist to
+  establish a real baseline, the next step is a conservative gate on
+  `factualIntegrity` specifically (reject/retry a "history"/"verified_fact"
+  story or news piece that scores clearly low on it) — deliberately not
+  implemented yet without evidence a given cutoff is meaningful.
+- **Topic diversity history has no UI/CLI inspection tool** — it's one JSON
+  object at `topic-history.json` in the content R2 bucket
+  (`Record<ReadingType, {id, category, date}[]>`), readable via any R2
+  browser/CLI, but there's no dedicated debug endpoint for it yet. Worth
+  adding if diversity ever needs auditing without digging through R2
+  directly.
+- **Latency/cost**: 3–4 sequential Claude calls per reading type (now up to
+  2× that on a structural-validation retry, bounded — see "Retry
+  behavior"). Consider this before enabling the optional vocabulary stage
+  broadly.
 - **No empirical baseline yet for the `0.6` quality-score test threshold**
   — it's a smoke-test floor, not a calibrated bar. Tighten it once
   `test:live` has run enough times to establish a real baseline.

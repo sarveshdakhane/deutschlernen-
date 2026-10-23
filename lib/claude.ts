@@ -10,6 +10,8 @@ import { getSampleForType } from "./sampleStories";
 import { logPromptDebug, logPipelineSummary, TokenUsage, PromptDebugStage } from "./promptDebugLog.server";
 import { queryQueuedEntry, markEntryUsed } from "./notion.server";
 import { pickVocabularyForReading, recordVocabularyUsed } from "./vocabCooldown.server";
+import { TopicItem } from "./topicPools";
+import { pickDailyTopics, recordTopicSelections } from "./topicSelection.server";
 
 function slugify(text: string): string {
   return text
@@ -127,6 +129,12 @@ const QUALITY_SCORE_FIELDS = [
   "register", "cefrConsistency", "translationInterference", "confidence",
 ] as const;
 
+// story/news only — see CONTENT_QUALITY_TYPES in lib/prompts/reviewPrompt.ts.
+// Optional: a missing value here must not invalidate the whole score the
+// way a missing REQUIRED field does, since dialogue/speaking reviews never
+// populate these.
+const CONTENT_QUALITY_SCORE_FIELDS = ["curiosity", "specificity", "coherence", "factualIntegrity"] as const;
+
 function parseQualityScore(value: unknown): QualityScore | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const v = value as Record<string, unknown>;
@@ -135,6 +143,10 @@ function parseQualityScore(value: unknown): QualityScore | undefined {
     const score = clampScore(v[field]);
     if (score === undefined) return undefined;
     result[field] = score;
+  }
+  for (const field of CONTENT_QUALITY_SCORE_FIELDS) {
+    const score = clampScore(v[field]);
+    if (score !== undefined) result[field] = score;
   }
   return result;
 }
@@ -295,6 +307,38 @@ async function runVocabularyPass(
 
 export type PipelineResult = { story: Story; quality?: QualityScore };
 
+// Bounded retry for steps 1-3 (generate -> review -> structural validate)
+// as a unit. Deliberately small and deliberately narrow in what triggers
+// it: only a thrown error (validateStory's missing-field checks,
+// validateContentQuality's empty/duplicate/malformed-dialogue checks, or a
+// transient API error) retries. The new review-quality dimensions below
+// (curiosity/specificity/coherence/factualIntegrity) do NOT trigger a
+// retry — there's no real score-distribution data yet to justify a
+// numeric cutoff (same caution the existing 0.6 smoke-test threshold in
+// tests/prompts/liveGeneration.test.ts already documents), so for now
+// they're observability-only, flowing into logPipelineSummary same as the
+// original 8 dimensions always have. A failure on the last attempt still
+// falls through to generateDailyReadingsCore's existing static-sample
+// fallback — this never becomes an unbounded loop.
+const MAX_GENERATION_ATTEMPTS = 2;
+
+type AttemptResult = { story: Story; review: { text: string; quality?: QualityScore } };
+
+async function attemptGenerateReviewValidate(
+  client: Anthropic,
+  type: ReadingType,
+  prompt: GenerationPrompt
+): Promise<AttemptResult> {
+  const draft = await runGenerationCall(client, type, prompt);
+  const story = validateStory(draft, type);
+
+  const review = await runReviewPass(client, type, story.difficulty, story.story);
+  story.story = review.text;
+
+  validateContentQuality(story, type);
+  return { story, review };
+}
+
 // The full pipeline: Prompt Builder -> Generator -> Native German Reviewer
 // -> Validator -> Grammar Analyzer -> Vocabulary Analyzer (optional).
 // Validator runs right after the reviewer and before the grammar analyzer
@@ -306,32 +350,42 @@ export type PipelineResult = { story: Story; quality?: QualityScore };
 // and in production by the Notion content queue (see queryQueuedEntry in
 // generateDailyReadingsCore below). `targetVocabulary`, when present, asks
 // the generator to work specific words into the text (see
-// buildVocabularyTargetInstruction in lib/prompts/shared.ts).
+// buildVocabularyTargetInstruction in lib/prompts/shared.ts). `topicItem`,
+// when present, is the pre-selected pool entry from
+// lib/topicSelection.server.ts (premise + factuality + background) —
+// mutually exclusive with topicOverride in practice (Notion wins when both
+// could apply; see generateDailyReadingsCore below).
 export async function generateOneReadingWithDiagnostics(
   type: ReadingType,
   apiKey: string,
   topicOverride?: string,
-  targetVocabulary?: string[]
+  targetVocabulary?: string[],
+  topicItem?: TopicItem
 ): Promise<PipelineResult> {
   const pipelineStart = Date.now();
   const client = new Anthropic({ apiKey });
-  const prompt = buildPromptForType(type, topicOverride, targetVocabulary);
+  const prompt = buildPromptForType(type, topicOverride, targetVocabulary, topicItem);
 
   const generationModel = getModelForStage("generation");
   const reviewModel = getModelForStage("review");
   const analysisModel = getModelForStage("analysis");
 
-  // 1. Generate — the writer's only job is natural German, nothing else.
-  const draft = await runGenerationCall(client, type, prompt);
-  const story = validateStory(draft, type);
-
-  // 2. Review — a native-speaker editor fixes only what sounds wrong, and
-  //    grades the result.
-  const review = await runReviewPass(client, type, story.difficulty, story.story);
-  story.story = review.text;
-
-  // 3. Validate — cheap structural/content sanity checks, no extra API call.
-  validateContentQuality(story, type);
+  // 1-3. Generate -> Review -> structural Validate, bounded-retried as a unit.
+  let attemptResult: AttemptResult | undefined;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
+    try {
+      attemptResult = await attemptGenerateReviewValidate(client, type, prompt);
+      break;
+    } catch (err) {
+      lastError = err;
+      if (attempt < MAX_GENERATION_ATTEMPTS) {
+        console.warn(`[generate] attempt ${attempt} failed for "${type}", retrying:`, err);
+      }
+    }
+  }
+  if (!attemptResult) throw lastError;
+  const { story, review } = attemptResult;
 
   // 4. Analyze — determine grammarChecklist from the final text.
   story.grammarChecklist = await runAnalysisPass(client, type, story.story);
@@ -359,6 +413,7 @@ export async function generateOneReadingWithDiagnostics(
     reviewModel,
     analysisModel,
     generatedAt: new Date().toISOString(),
+    ...(topicItem ? { topicId: topicItem.id, topicCategory: topicItem.category } : {}),
   };
 
   logPipelineSummary({
@@ -375,9 +430,10 @@ async function generateOneReading(
   type: ReadingType,
   apiKey: string,
   topicOverride?: string,
-  targetVocabulary?: string[]
+  targetVocabulary?: string[],
+  topicItem?: TopicItem
 ): Promise<Story> {
-  return (await generateOneReadingWithDiagnostics(type, apiKey, topicOverride, targetVocabulary)).story;
+  return (await generateOneReadingWithDiagnostics(type, apiKey, topicOverride, targetVocabulary, topicItem)).story;
 }
 
 async function fetchPixabayImage(topic: string): Promise<string | undefined> {
@@ -419,30 +475,48 @@ export async function generateDailyReadingsCore(targetDate: string, bucket: R2Bu
     return devStories;
   }
 
+  // Picked once, synchronously, for all 4 types before any generation
+  // starts — see lib/topicSelection.server.ts's module doc comment for why
+  // this avoids the 4 types racing each other over the shared history
+  // record (they don't: they're all in this one call).
+  const dailyTopics = await pickDailyTopics(bucket, targetDate);
+  const usedTopics: Partial<Record<ReadingType, TopicItem>> = {};
+
   const results = await Promise.allSettled(
     types.map(async (type) => {
-      // Notion-sourced topic takes priority over the deterministic
-      // day-indexed rotation when a "Ready" queue entry exists for this
-      // type; vocabulary is sourced independently from the Vocab page's
-      // word pool (lib/vocabCooldown.server.ts) regardless of whether a
-      // topic entry exists. Both are only marked "used" once generation +
-      // image fetch actually succeed — on failure, Promise.allSettled
-      // catches the rejection below and the topic row stays "Ready" /
-      // the words stay out of cooldown for the next cycle to retry.
+      // Notion-sourced topic takes priority over the pool-based selection
+      // when a "Ready" queue entry exists for this type; vocabulary is
+      // sourced independently from the Vocab page's word pool
+      // (lib/vocabCooldown.server.ts) regardless of whether a topic entry
+      // exists. Both are only marked "used" once generation + image fetch
+      // actually succeed — on failure, Promise.allSettled catches the
+      // rejection below and the topic row stays "Ready" / the words stay
+      // out of cooldown for the next cycle to retry.
       const queued = await queryQueuedEntry(type);
+      const topicItem = queued ? undefined : dailyTopics[type];
       const vocabWords = await pickVocabularyForReading(bucket);
       const story = await generateOneReading(
         type,
         apiKey,
         queued?.topic,
-        vocabWords.length > 0 ? vocabWords : undefined
+        vocabWords.length > 0 ? vocabWords : undefined,
+        topicItem
       );
       const imageUrl = await fetchPixabayImage(story.imageKeyword ?? story.topic);
       if (queued) await markEntryUsed(queued.pageId);
       await recordVocabularyUsed(bucket, vocabWords);
+      // Only record pool-sourced picks (not Notion overrides) into the
+      // diversity history — a manually queued topic isn't part of the pool
+      // the selector rotates through.
+      if (topicItem) usedTopics[type] = topicItem;
       return { ...story, date: targetDate, imageUrl };
     })
   );
+
+  // Fire-and-forget-ish but awaited: best-effort, fails soft internally
+  // (see recordTopicSelections) — a history-write hiccup never affects the
+  // readings that were already generated above.
+  await recordTopicSelections(bucket, targetDate, usedTopics);
 
   return results.map((result, i) => {
     if (result.status === "fulfilled") return result.value;

@@ -60,6 +60,52 @@ export async function putJson(bucket: R2Bucket, key: string, value: unknown): Pr
   await putText(bucket, key, JSON.stringify(value), "application/json");
 }
 
+// Read-with-etag, for the optimistic-concurrency read-modify-write pattern
+// below. `etag: null` means the object didn't exist at read time.
+export async function getJsonWithEtag<T>(
+  bucket: R2Bucket,
+  key: string
+): Promise<{ value: T | null; etag: string | null }> {
+  const obj = await bucket.get(key);
+  if (!obj) return { value: null, etag: null };
+  try {
+    return { value: JSON.parse(await obj.text()) as T, etag: obj.etag };
+  } catch {
+    return { value: null, etag: obj.etag };
+  }
+}
+
+// Conditional write — succeeds only if the object's etag still matches what
+// was read. Returns false on a conflict so the caller can re-read and
+// retry, instead of silently clobbering a concurrent writer's update. Used
+// by lib/topicSelection.server.ts, where two Durable Object instances (e.g.
+// today's and tomorrow's prefetch) could otherwise race on the same shared
+// topic-history record.
+//
+// `etag: null` (object didn't exist at read time) falls back to a plain
+// unconditional put rather than a conditional "create-only" write — R2's
+// onlyIf doesn't expose a confirmed "must not exist" primitive, and this
+// path is a one-time bootstrap case (first-ever history write) where losing
+// a single concurrent entry is an acceptable, self-healing edge case for a
+// best-effort diversity feature, not correctness-critical data.
+export async function putJsonIfMatch(
+  bucket: R2Bucket,
+  key: string,
+  value: unknown,
+  etag: string | null
+): Promise<boolean> {
+  const body = JSON.stringify(value);
+  if (!etag) {
+    await putText(bucket, key, body, "application/json");
+    return true;
+  }
+  const result = await bucket.put(key, body, {
+    httpMetadata: { contentType: "application/json" },
+    onlyIf: { etagMatches: etag },
+  });
+  return result !== null;
+}
+
 export async function listKeys(
   bucket: R2Bucket,
   prefix: string

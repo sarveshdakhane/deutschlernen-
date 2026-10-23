@@ -6,6 +6,8 @@ import {
   buildVocabularyTargetInstruction,
   selfCheckInstruction,
 } from "./prompts/shared";
+import { TopicItem, STORY_POOL, NEWS_POOL, DIALOGUE_POOL, SPEAKING_POOL } from "./topicPools";
+import { selectTopic } from "./topicSelection";
 
 // Renders the optional vocabulary-targeting block, or an empty string when no
 // target words were supplied (the common case — only the Notion content
@@ -24,12 +26,17 @@ export type GenerationPrompt = { system: string; user: string };
 // lib/prompts/analysisPrompt.ts) inspects the finished text afterwards and
 // fills the checklist based on what's actually there, so the writer is never
 // pulled between "sound natural" and "prove I used Konjunktiv II".
-const JSON_TEMPLATE = (readingType: ReadingType) => `{
+//
+// `difficulty` is a parameter (not hardcoded "B1") so every reading type —
+// including speaking's A2 — shows the model a schema example with the
+// CORRECT difficulty literal. Showing "B1" in the example for an A2 prompt
+// risked the model copying it verbatim into the difficulty field itself.
+const JSON_TEMPLATE = (readingType: ReadingType, difficulty: "A2" | "B1") => `{
   "title": "",
   "date": "",
   "topic": "",
   "imageKeyword": "",
-  "difficulty": "B1",
+  "difficulty": "${difficulty}",
   "readingType": "${readingType}",
   "story": "",
   "vocabulary": [
@@ -68,25 +75,73 @@ export const STORY_STYLE_EXCERPT = `Nach der Arbeit ging Julia noch schnell eink
 
 export const NEWS_STYLE_EXCERPT = `Laut einer aktuellen Studie ist die Zahl der Fahrgäste im öffentlichen Nahverkehr im letzten Jahr deutlich gestiegen. „Das zeigt, dass sich das Angebot lohnt", sagte ein Sprecher des Verkehrsverbunds.`;
 
-export function buildNewsPrompt(topicOverride?: string, targetVocabulary?: string[]): GenerationPrompt {
-  const today = new Date().toISOString().split("T")[0];
-  const categories = [
-    "German federal politics (Bundestag, Koalition, new laws, party decisions, chancellor/ministers)",
-    "German economy (DAX, inflation, energy prices, major companies, jobs, trade, Mindestlohn)",
-    "Climate and environment in Germany (Energiewende, flooding, drought, CO2 targets, renewables)",
-    "German society and migration (Asylpolitik, integration, demographic change, housing shortage)",
-    "European Union and Germany's role (EU policy, elections, Germany's EU presidency, Euro)",
-    "German health system (Krankenversicherung reform, hospitals, new medical research, drug costs)",
-    "German education and youth (Schulreform, Abitur, apprenticeships, university, digital schools)",
-    "German sports (Bundesliga, national football team, Olympics, major German sporting events)",
-    "Technology and digital Germany (AI policy, digitalization, cybersecurity, Deutsche Bahn, Tesla Gigafactory)",
-    "German culture and society (film festivals, museums, Oktoberfest, public holidays, social trends)",
-  ];
-  const pick = topicOverride ?? categories[Math.floor((new Date(today).getTime() / 86400000) % categories.length)];
+function todayIso(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+// Deterministic zero-knowledge fallback pick, used only when a builder is
+// called with neither topicOverride nor a pre-resolved topicItem (direct
+// unit-test calls, or any future caller that hasn't wired up
+// lib/topicSelection.server.ts). Still seeded/deterministic — never the old
+// day-count-modulo rotation, and never Math.random().
+function fallbackPick(pool: TopicItem[], type: ReadingType): TopicItem {
+  const today = todayIso();
+  return selectTopic(pool, `${today}:${type}:v1`, { recentHistory: [], today }).item;
+}
+
+// Builds the TOPIC/SCENARIO section shared by news and story: states the
+// premise, then — this is the authenticity-critical part — tells the model
+// exactly how much latitude it has based on `factuality`. "history" items
+// supply verified background facts the model must stick to; "fiction" items
+// are explicitly labeled as invented; "verified_fact" sits in between
+// (general/structural truths, no specific invented events).
+function factualitySection(item: TopicItem): string {
+  const lines: string[] = [];
+
+  if (item.factuality === "history") {
+    lines.push(
+      "FACTUALITY: This is a REAL HISTORICAL EVENT. You may narrate it, dramatize tone and ordinary scene-setting (weather, surroundings, plausible everyday detail), but you must NOT invent additional names, dates, statistics, organizations, or quotations beyond what's given below. If you're unsure whether a specific detail is real, leave it out or keep it general rather than inventing it."
+    );
+    if (item.verifiedBackground?.length) {
+      lines.push("VERIFIED FACTS (use these as your factual anchor — do not contradict or add invented specifics to them):");
+      lines.push(item.verifiedBackground.map((f) => `- ${f}`).join("\n"));
+    }
+  } else if (item.factuality === "verified_fact") {
+    lines.push(
+      "FACTUALITY: This is a REAL, general-knowledge subject (not a specific invented event). Write it as a true explainer — stick to well-established, structural facts. Do not invent a specific date, named official, or quotation to make it feel like breaking news; if that's not knowable, don't claim it."
+    );
+    if (item.verifiedBackground?.length) {
+      lines.push("BACKGROUND (true, supplied — use it as your anchor, don't contradict it):");
+      lines.push(item.verifiedBackground.map((f) => `- ${f}`).join("\n"));
+    }
+  } else if (item.factuality === "fiction") {
+    lines.push(
+      "FACTUALITY: This is a FICTIONAL scenario with invented characters and events. Write it with specific, believable, concrete detail — but never present it as something that really happened, and never attribute it to real people, companies, or institutions."
+    );
+  }
+
+  if (item.format) lines.push(`SUGGESTED FORMAT: ${item.format.replace(/_/g, " ")} — adapt if a different natural structure serves this premise better; this is a steer, not a rigid template.`);
+  if (item.centralConflict) lines.push(`CENTRAL TENSION: ${item.centralConflict}`);
+  if (item.emotionalTone) lines.push(`TONE: ${item.emotionalTone}`);
+
+  return lines.join("\n");
+}
+
+export function buildNewsPrompt(topicOverride?: string, targetVocabulary?: string[], topicItem?: TopicItem): GenerationPrompt {
+  const today = todayIso();
+  const item = topicOverride ? undefined : topicItem ?? fallbackPick(NEWS_POOL, "news");
 
   const system = composeSystemPrompt(
-    "Right now you are working as a professional German news journalist writing Tagesschau/Der-Spiegel-style articles for B1 language learners."
+    "Right now you are working as a professional German journalist writing clear, accessible explainer articles for B1 language learners — think a well-sourced background piece, not a wire-service breaking-news bulletin."
   );
+
+  const topicSection = topicOverride
+    ? `TOPIC FOR TODAY: ${topicOverride}
+
+FACTUALITY: Treat this as a real, general subject. Do NOT invent a specific "today's event," a named official, or a direct quotation to dress it up as breaking news — you have no verified source text for this topic, so write it as an accurate, accessible explainer instead. If you are not confident a specific detail is true, state it generally rather than inventing a specific number, date, or name.`
+    : `TOPIC FOR TODAY: ${item!.premise}
+
+${factualitySection(item!)}`;
 
   const user = `Today's date: ${today}
 
@@ -96,21 +151,20 @@ ${NEWS_STYLE_EXCERPT}
 """
 
 TASK:
-Write one realistic German B1-level news article (Nachrichtenartikel) in the style of Tagesschau or Der Spiegel, but using accessible B1 German.
+Write one accessible German B1-level journalistic explainer article (Hintergrundbericht) about the topic below. This is background/explainer journalism, not a report of a specific invented news event — the goal is to teach the reader something true and genuinely interesting, in clear B1 German.
 
 The output must be valid JSON only. Do not include markdown. Do not include explanations outside JSON.
 
-TOPIC CATEGORY FOR TODAY: ${pick}
+${topicSection}
 
 ARTICLE REQUIREMENTS:
-- Write about a specific, realistic news event or development in the chosen category — something that could plausibly be a top news story in Germany around ${today}.
-- Give the article a proper journalistic headline (title) that sounds like a real German news headline.
-- Style: factual and journalistic. Short, clear sentences. B1 vocabulary. Real places, institutions, and job titles (Bundesministerium, Sprecher, Bürgermeisterin, etc.).
+- Give the article a clear, engaging headline (title) — journalistic in tone, not a dry textbook heading.
+- Style: factual, clear, and journalistic, but structured as an explainer, not a breaking-news report. Short, clear sentences. B1 vocabulary. Real institution/role names are fine in general terms (Bundesministerium, Krankenkasse, Bundesliga) — do not invent a specific named individual, quotation, or precise statistic you aren't given above.
 - 300–370 words total.
-- Structure: lead paragraph (who/what/where/when), background, expert or official quote, outlook.
-- Include at least one direct quote with attribution (e.g., "Bundesminister Müller sagte: ...").
-- This genre often draws on Passiv, Nebensätze mit "dass/weil/obwohl", Modalverben, and Konjunktiv II for reported speech — use them where real journalism would.
-- Do NOT write about Mietpreise, Deutschlandticket, or recycling — pick something more substantive from the category above.
+- Structure: an engaging opening that states clearly what this is about and why it matters, context/background, how it actually works or what's genuinely at stake, a brief, honest note on debate or trade-offs if the topic has one, and a short closing thought.
+- Do NOT invent direct quotations attributed to a named real-sounding official, spokesperson, or expert. If illustrative commentary genuinely helps the piece, phrase it generically and impersonally (e.g., "Kritiker weisen oft darauf hin, dass ...", "Befürworter argumentieren, dass ...") without inventing a specific named source.
+- This genre often draws on Passiv, Nebensätze mit "dass/weil/obwohl", Modalverben, and Konjunktiv II for reported/hedged claims — use them where real journalism naturally would.
+- Do NOT write about Mietpreise, Deutschlandticket, or recycling — these have been covered repeatedly; pick something that actually teaches the reader something new.
 
 ${NATURAL_GERMAN_RULES}
 
@@ -131,7 +185,7 @@ QUIZ — Multiple Choice:
 
 Return this exact JSON structure:
 
-${JSON_TEMPLATE("news")}
+${JSON_TEMPLATE("news", "B1")}
 
 IMAGE KEYWORD:
 - "imageKeyword": 2–3 simple English words for a Pixabay photo search that visually matches the story (e.g. "berlin parliament", "cafe friends", "doctor patient", "moving boxes"). Avoid abstract words — pick something a photo can show.
@@ -143,31 +197,12 @@ Return JSON only. No markdown. No explanations outside JSON.`;
   return { system, user };
 }
 
-export function buildDialoguePrompt(topicOverride?: string, targetVocabulary?: string[]): GenerationPrompt {
-  const today = new Date().toISOString().split("T")[0];
-  const topics = [
-    "two colleagues arguing (politely) about how to handle a difficult customer at work",
-    "flatmates negotiating new house rules after one of them gets a dog",
-    "two friends planning a road trip across Germany — disagreeing on the route and budget",
-    "a person calling their insurance company about a rejected claim",
-    "two students discussing whether to change their university major",
-    "a job applicant and a friend doing a mock interview to prepare",
-    "two neighbours dealing with a noise complaint and trying to find a solution",
-    "siblings planning their parents' surprise anniversary party and disagreeing on details",
-    "two friends debating whether to move to a new city for work",
-    "a person trying to explain a complicated situation to their landlord",
-    "two colleagues planning an office Christmas party with very different ideas",
-    "two friends — one vegan, one not — cooking together and negotiating the menu",
-    "a person and their doctor discussing a lifestyle change and the patient's resistance",
-    "two friends debating whether social media is good or bad, using personal examples",
-    "a parent and adult child discussing whether the child should move back home to save money",
-    "two colleagues, one working from home and one in-office, complaining to each other",
-    "two strangers stuck together at a delayed train station passing the time",
-    "a person negotiating a pay rise with their manager",
-    "two friends who haven't seen each other in a year catching up over dinner",
-    "a couple deciding between adopting a pet and the complications that come with it",
-  ];
-  const pick = topicOverride ?? topics[Math.floor((new Date(today).getTime() / 86400000) % topics.length)];
+export function buildDialoguePrompt(topicOverride?: string, targetVocabulary?: string[], topicItem?: TopicItem): GenerationPrompt {
+  const item = topicOverride ? undefined : topicItem ?? fallbackPick(DIALOGUE_POOL, "dialogue");
+  const pick = topicOverride ?? item!.premise;
+  const purposeLine = !topicOverride && item?.purpose ? `\nCOMMUNICATIVE PURPOSE: ${item.purpose}` : "";
+  const toneLine = !topicOverride && item?.emotionalTone ? `\nTONE: ${item.emotionalTone}` : "";
+  const conflictLine = !topicOverride && item?.centralConflict ? `\nCENTRAL TENSION: ${item.centralConflict}` : "";
 
   const system = composeSystemPrompt(
     "Right now you are working as a German B1 exam teacher and dialogue writer, creating a natural two-person conversation for reading and speaking practice."
@@ -183,14 +218,14 @@ Create a long, natural German B1-level dialogue (Gespräch) between two people f
 
 The output must be valid JSON only. Do not include markdown. Do not include explanations outside JSON.
 
-SCENARIO FOR TODAY: ${pick}
+SCENARIO FOR TODAY: ${pick}${purposeLine}${conflictLine}${toneLine}
 
 CONTENT REQUIREMENTS:
 - Two characters with realistic German first names that fit the scenario.
 - 400–480 words total — this should be a substantial dialogue, not a short exchange.
 - Format each speaker line as: "Name: text" on its own line, separated by a blank line.
 - Make it feel completely real: include interruptions, disagreements, misunderstandings, clarifications, and emotions.
-- The characters should have different opinions or goals — create real tension or negotiation.
+- The characters should have different opinions or goals — create real tension or negotiation, not just an exchange of pleasantries.
 - Include moments of humour, awkwardness, or surprise to keep it engaging.
 - End with 2–3 narrator sentences describing the outcome.
 - At least 75% of the text must be direct dialogue (not narration).
@@ -216,7 +251,7 @@ QUIZ — Multiple Choice:
 
 Return this exact JSON structure:
 
-${JSON_TEMPLATE("dialogue")}
+${JSON_TEMPLATE("dialogue", "B1")}
 
 IMAGE KEYWORD:
 - "imageKeyword": 2–3 simple English words for a Pixabay photo search that visually matches the story (e.g. "berlin parliament", "cafe friends", "doctor patient", "moving boxes"). Avoid abstract words — pick something a photo can show.
@@ -228,14 +263,16 @@ Return JSON only. No markdown. No explanations outside JSON.`;
   return { system, user };
 }
 
-export function buildStoryPrompt(topicOverride?: string, targetVocabulary?: string[]): GenerationPrompt {
+export function buildStoryPrompt(topicOverride?: string, targetVocabulary?: string[], topicItem?: TopicItem): GenerationPrompt {
+  const item = topicOverride ? undefined : topicItem ?? fallbackPick(STORY_POOL, "story");
+
   const system = composeSystemPrompt(
-    "Right now you are working as a German B1 exam teacher, writing a short story for reading practice."
+    "Right now you are working as a German B1 editor and storyteller who writes genuinely interesting reading-practice pieces — the kind someone would enjoy even if they weren't studying German. Some are true (history, curious real facts, human-interest), some are fiction; you always make clear, implicitly through how the piece is written, which one this is."
   );
 
   const topicSection = topicOverride
-    ? `TOPIC:\nWrite about this specific topic: ${topicOverride}.`
-    : `TOPIC:\nChoose one realistic B1 topic (vary it — avoid repeating the same topics): work problems, friendships, family situations, doctor visits, online shopping, restaurant situations, language learning, workplace communication, neighbour problems, technology issues, social media misunderstandings, hobbies, stress and motivation, teamwork, customer service, planning events, cultural misunderstandings, job interviews, daily life in Germany.`;
+    ? `PREMISE FOR TODAY:\n${topicOverride}\n\nFACTUALITY: Unless the premise above is clearly describing a well-known real event, treat this as a fictional scenario — invented but believable, never presented as a verified true account.`
+    : `PREMISE FOR TODAY:\n${item!.premise}\n\n${factualitySection(item!)}`;
 
   const user = `STYLE REFERENCE (tone only — do not reuse this scenario, these characters, or this wording):
 """
@@ -243,7 +280,7 @@ ${STORY_STYLE_EXCERPT}
 """
 
 TASK:
-Create one realistic German B1-level short story for reading practice.
+Write one genuinely engaging German B1-level reading-practice piece based on the premise below.
 
 The output must be valid JSON only. Do not include markdown. Do not include explanations outside JSON.
 
@@ -251,34 +288,34 @@ ${topicSection}
 
 STORY REQUIREMENTS:
 - 350–420 words.
-- Use natural, modern German — not robotic or overly formal.
-- Use mostly A2–B1 vocabulary with a few useful new words introduced naturally.
-- Mix narration and dialogue. At least 35% of the story must be dialogue.
-- Dialogues must sound realistic and useful for speaking practice.
-- Include emotions, opinions, reactions, and everyday communication.
-- Write in a style similar to Goethe/TELC B1 reading texts, but more engaging and conversational.
-- This level draws on: Präsens, Perfekt, Modalverben, Nebensätze, Relativsätze, Konjunktiv II, and Passiv — use whichever of these actually occur naturally in the narration and dialogue, not all of them forced into every paragraph.
+- Use natural, modern German — not robotic or overly formal. Use mostly A2–B1 vocabulary with a few useful new words introduced naturally.
+- OPENING: start with whatever makes this premise interesting — a surprising fact, an unusual situation, a question, a decision point, or a conflict already in motion. Avoid generic openings like someone simply waking up, starting an ordinary commute, or describing a routine day, unless that ordinariness is itself about to be disrupted within the first sentence or two.
+- Give the reader concrete, memorable, specific details (a place, a number, an object, a name) rather than filler sentences added just to reach the word count.
+- Vary the structure to fit the premise — not every piece needs a problem, a conversation, and a tidy happy ending. A historical account can read like a short reconstruction; a curious-fact piece can read like a lively explainer; a dilemma can end without a clean resolution.
+- The ending should fit the piece: surprising, reflective, funny, open-ended, or simply informative, as the subject calls for — avoid a generic moral lesson or predictable feel-good wrap-up unless the premise genuinely earns it.
+- Use dialogue only where it genuinely serves the piece (a scene between people). Do not force dialogue into a historical account or factual explainer that doesn't naturally have any — when dialogue is absent, narration and scene-setting alone are completely fine.
+- This level draws on: Präsens, Perfekt, Modalverben, Nebensätze, Relativsätze, Konjunktiv II, and Passiv — use whichever of these actually occur naturally in the piece, never all of them forced into every paragraph, and never a construction included just to tick a grammar box.
 
 ${NATURAL_GERMAN_RULES}
 
 ${COLLOCATION_RULES}
 ${vocabularyTargetSection(targetVocabulary)}
 VOCABULARY:
-- 10–14 useful words from the story.
+- 10–14 useful words from the piece.
 - Include German word, English meaning, and a German example sentence.
 
 SENTENCE PATTERNS:
-- 5–8 sentence patterns from the story useful for B1 writing.
+- 5–8 sentence patterns from the piece useful for B1 writing.
 
 QUIZ — Multiple Choice:
-- Exactly 5 questions testing reading comprehension of the story.
+- Exactly 5 questions testing reading comprehension of the piece.
 - Each question has exactly 4 answer options.
-- Exactly one option is correct. The others are plausible but clearly wrong based on the story.
+- Exactly one option is correct. The others are plausible but clearly wrong based on the piece.
 - "answer" is the 0-based index of the correct option (0 = first, 1 = second, 2 = third, 3 = fourth).
 
 Return this exact JSON structure:
 
-${JSON_TEMPLATE("story")}
+${JSON_TEMPLATE("story", "B1")}
 
 IMAGE KEYWORD:
 - "imageKeyword": 2–3 simple English words for a Pixabay photo search that visually matches the story (e.g. "berlin parliament", "cafe friends", "doctor patient", "moving boxes"). Avoid abstract words — pick something a photo can show.
@@ -290,31 +327,10 @@ Return JSON only. No markdown. No explanations outside JSON.`;
   return { system, user };
 }
 
-export function buildSpeakingPrompt(topicOverride?: string, targetVocabulary?: string[]): GenerationPrompt {
-  const today = new Date().toISOString().split("T")[0];
-  const scenarios = [
-    "two friends making plans to go hiking — one is very enthusiastic, the other hesitant",
-    "a customer returning a broken item to a shop and the shop assistant trying to help",
-    "two people at a supermarket checkout — one forgot their wallet, the other offers to help",
-    "a tourist asking a local for directions to the nearest train station",
-    "someone calling a doctor's office to book an urgent appointment",
-    "two friends arguing (nicely) about which film to watch tonight",
-    "a person asking a neighbour to water their plants while they're on holiday",
-    "a student asking a teacher for help understanding a homework assignment",
-    "two people meeting for the first time at a language exchange event",
-    "a person at a bakery struggling to explain what they want (it's their first time)",
-    "two colleagues deciding where to go for lunch and having different preferences",
-    "someone calling a hotel to ask about available rooms and prices",
-    "a person at a pharmacy asking for medicine and the pharmacist asking follow-up questions",
-    "two friends at a flea market — one wants to buy something, the other tries to bargain",
-    "someone asking a bus driver whether this bus stops near the city park",
-    "two people in a waiting room chatting about why they are both there",
-    "a person asking in a café whether the food is vegetarian",
-    "two friends discussing their favourite German word or phrase they have learnt",
-    "someone asking a colleague to explain how the coffee machine works",
-    "a person calling a sports centre to ask about membership prices and opening times",
-  ];
-  const pick = topicOverride ?? scenarios[Math.floor((new Date(today).getTime() / 86400000) % scenarios.length)];
+export function buildSpeakingPrompt(topicOverride?: string, targetVocabulary?: string[], topicItem?: TopicItem): GenerationPrompt {
+  const item = topicOverride ? undefined : topicItem ?? fallbackPick(SPEAKING_POOL, "speaking");
+  const pick = topicOverride ?? item!.premise;
+  const purposeLine = !topicOverride && item?.purpose ? `\nCOMMUNICATIVE PURPOSE: ${item.purpose} — make sure the dialogue clearly accomplishes this, not just generic small talk in this setting.` : "";
 
   const system = composeSystemPrompt(
     "Right now you are working as a friendly German A2 language teacher helping a learner improve their spoken German by writing a natural, readable-aloud dialogue."
@@ -330,7 +346,7 @@ Create a natural A2-level dialogue between two people that a learner can read al
 
 The output must be valid JSON only. Do not include markdown. Do not include explanations outside JSON.
 
-SCENARIO FOR TODAY: ${pick}
+SCENARIO FOR TODAY: ${pick}${purposeLine}
 
 CONTENT REQUIREMENTS:
 - Two characters with names that fit the scenario — give them different personalities.
@@ -338,7 +354,9 @@ CONTENT REQUIREMENTS:
 - Format each line as: "Name: text" on its own line, separated by a blank line.
 - Use ONLY A1–A2 vocabulary and grammar: Präsens, simple Perfekt with haben/sein, modal verbs (können, möchten, müssen, dürfen), simple questions and answers, and basic Konjunktiv II (könnte, würde, hätte) where it naturally fits.
 - Sentences: clear and short — maximum 12 words per sentence.
-- Make it feel genuine — include small talk, hesitation words (Hmm, Ach so, Na ja), polite phrases (Bitte, Danke schön, Entschuldigung, Kein Problem), and a warm ending.
+- Give the scenario a specific, concrete reason for the conversation and a natural outcome by the end — not just atmosphere.
+- Make it feel genuine — include natural small talk, hesitation, and politeness markers that fit THIS specific scene. Vary which discourse markers and polite phrases you reach for across different dialogues (see the NATURALNESS RULES below for the shared pool) rather than defaulting to the same few words every time — a dialogue about a pet should not sound like one about train directions.
+- Let the scenario genuinely drive the vocabulary: pull words from whatever domain the scene actually calls for (food, family, weather, chores, hobbies, transport, shopping, health, etc.) instead of generic filler.
 - Set the scene in a specific real German place — a city, a neighbourhood, a type of shop or location. NOT always Berlin. Use Hamburg, Munich, Frankfurt, Cologne, Dresden, Stuttgart, etc.
 - After the dialogue, add 2 short sentences of narrator text describing the outcome.
 
@@ -361,29 +379,7 @@ SENTENCE PATTERNS:
 
 Return this exact JSON structure:
 
-{
-  "title": "",
-  "date": "",
-  "topic": "",
-  "difficulty": "A2",
-  "readingType": "speaking",
-  "story": "",
-  "vocabulary": [
-    { "word": "", "meaning": "", "example": "" }
-  ],
-  "sentencePatterns": [
-    { "pattern": "", "meaning": "", "example": "" }
-  ],
-  "quiz": {
-    "questions": [
-      {
-        "question": "",
-        "options": ["", "", "", ""],
-        "answer": 0
-      }
-    ]
-  }
-}
+${JSON_TEMPLATE("speaking", "A2")}
 
 IMAGE KEYWORD:
 - "imageKeyword": 2–3 simple English words for a Pixabay photo search that visually matches the story (e.g. "berlin parliament", "cafe friends", "doctor patient", "moving boxes"). Avoid abstract words — pick something a photo can show.
@@ -398,12 +394,13 @@ Return JSON only. No markdown. No explanations outside JSON.`;
 export function buildPromptForType(
   type: ReadingType,
   topicOverride?: string,
-  targetVocabulary?: string[]
+  targetVocabulary?: string[],
+  topicItem?: TopicItem
 ): GenerationPrompt {
   switch (type) {
-    case "news":     return buildNewsPrompt(topicOverride, targetVocabulary);
-    case "dialogue": return buildDialoguePrompt(topicOverride, targetVocabulary);
-    case "story":    return buildStoryPrompt(topicOverride, targetVocabulary);
-    case "speaking": return buildSpeakingPrompt(topicOverride, targetVocabulary);
+    case "news":     return buildNewsPrompt(topicOverride, targetVocabulary, topicItem);
+    case "dialogue": return buildDialoguePrompt(topicOverride, targetVocabulary, topicItem);
+    case "story":    return buildStoryPrompt(topicOverride, targetVocabulary, topicItem);
+    case "speaking": return buildSpeakingPrompt(topicOverride, targetVocabulary, topicItem);
   }
 }

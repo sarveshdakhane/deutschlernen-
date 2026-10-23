@@ -43,6 +43,11 @@ export type PipelineMeta = {
   reviewModel: string;
   analysisModel: string;
   generatedAt: string;
+  // Which topic-pool item (if any) produced this reading — absent when a
+  // Notion topicOverride was used instead. Debugging/audit only, same as
+  // the rest of this type; not shown in the UI. See lib/topicPools.ts.
+  topicId?: string;
+  topicCategory?: string;
 };
 
 // Structured quality signal produced by the review stage. Internal only —
@@ -59,6 +64,12 @@ export type QualityScore = {
   cefrConsistency: number;
   translationInterference: number;
   confidence: number;
+  // story/news only (see CONTENT_QUALITY_TYPES in lib/prompts/reviewPrompt.ts)
+  // — dialogue/speaking reviews never populate these.
+  curiosity?: number;
+  specificity?: number;
+  coherence?: number;
+  factualIntegrity?: number;
 };
 
 export type Story = {

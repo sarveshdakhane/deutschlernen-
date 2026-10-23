@@ -20,7 +20,7 @@ export function composeSystemPrompt(roleAddendum: string): string {
 // or analysisPrompt.ts changes meaningfully. It travels with every generated
 // Story (see Story["meta"] in lib/types.ts) purely for debugging — e.g. to
 // tell whether a quality regression correlates with a prompt edit.
-export const PROMPT_VERSION = "2.1.0";
+export const PROMPT_VERSION = "2.3.0";
 
 export const NATURAL_GERMAN_RULES = `NATURALNESS RULES (apply to every sentence you write):
 - Prioritize realism and idiomatic German over grammatical feature coverage. If a required grammar feature would sound forced in a given sentence, leave it out rather than force it in — naturalness always wins over demonstrating grammar.
