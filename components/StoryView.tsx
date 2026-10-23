@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Story, ReadingType } from "@/lib/types";
 import QuizSection from "./QuizSection";
 import StoryParagraphs from "./StoryParagraphs";
+import ListenMode from "./ListenMode";
 
 const TYPE_CONFIG: Record<ReadingType, { label: string; icon: string; bg: string; text: string }> = {
   news:     { label: "Nachrichten", icon: "📰", bg: "bg-blue-500/10",    text: "text-blue-300" },
@@ -22,6 +23,7 @@ export default function StoryView({ story }: Props) {
   const goHome = () => router.push("/");
 
   const [swipeX, setSwipeX] = useState(0);
+  const [hideText, setHideText] = useState(false);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const edgeSwipe = useRef(false);
@@ -108,10 +110,21 @@ export default function StoryView({ story }: Props) {
         </div>
       )}
 
+      {/* Listening practice */}
+      <ListenMode paragraphs={paragraphs} hideText={hideText} onToggleHideText={() => setHideText((v) => !v)} />
+
       {/* Story text */}
-      <section className="bg-slate-800 border border-slate-700 rounded-2xl px-5 py-7 sm:px-14 sm:py-12 mb-4 sm:mb-6 space-y-5 sm:space-y-6">
-        <StoryParagraphs paragraphs={paragraphs} />
-      </section>
+      {hideText ? (
+        <div className="flex items-center justify-center text-center bg-slate-800 border border-dashed border-slate-700 rounded-2xl px-5 py-12 mb-4 sm:mb-6">
+          <p className="text-sm text-slate-500">
+            Text ist versteckt — hör zu, dann beantworte das Quiz unten. Haken bei &quot;Text verstecken&quot; entfernen, um den Text zu sehen.
+          </p>
+        </div>
+      ) : (
+        <section className="bg-slate-800 border border-slate-700 rounded-2xl px-5 py-7 sm:px-14 sm:py-12 mb-4 sm:mb-6 space-y-5 sm:space-y-6">
+          <StoryParagraphs paragraphs={paragraphs} />
+        </section>
+      )}
 
       {/* Quiz */}
       {(story.quiz.questions?.length ?? 0) > 0 && (
