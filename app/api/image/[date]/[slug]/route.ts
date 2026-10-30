@@ -1,20 +1,21 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { getBinary, putBinary } from "@/lib/storage.server";
+import { getBinary, getJson, putBinary } from "@/lib/storage.server";
+import { Story } from "@/lib/types";
 
 export const maxDuration = 30;
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ date: string; slug: string }> }
 ) {
   const { date, slug } = await params;
-  const keyword = new URL(request.url).searchParams.get("kw");
 
-  if (!date.match(/^\d{4}-\d{2}-\d{2}$/) || !slug) {
+  if (!date.match(/^\d{4}-\d{2}-\d{2}$/) || !slug || slug.length > 200) {
     return new Response(null, { status: 400 });
   }
 
-  const filename = `image-${date}-${decodeURIComponent(slug)}.jpg`;
+  const decodedSlug = decodeURIComponent(slug);
+  const filename = `image-${date}-${decodedSlug}.jpg`;
   const { env } = getCloudflareContext();
   const bucket = env.CONTENT_BUCKET;
 
@@ -29,7 +30,16 @@ export async function GET(
     });
   }
 
-  if (!keyword || !process.env.PIXABAY_API_KEY) {
+  if (!process.env.PIXABAY_API_KEY) {
+    return new Response(null, { status: 404 });
+  }
+
+  // The keyword comes from the stored story, never from the `kw` query param
+  // (still present in older URLs, but ignored). Otherwise anyone could spend
+  // the Pixabay quota on arbitrary searches and fill R2 with arbitrary files.
+  const readings = await getJson<Story[]>(bucket, `readings-${date}.json`).catch(() => null);
+  const keyword = readings?.find((s) => s.slug === decodedSlug)?.imageKeyword;
+  if (!keyword) {
     return new Response(null, { status: 404 });
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { requestGeneration } from "@/lib/generationCoordinatorClient.server";
+import { isAdminRequest } from "@/lib/adminAuth.server";
 import { PrepositionQuestion } from "@/lib/types";
 
 export const maxDuration = 30;
@@ -13,6 +14,10 @@ function getTomorrowDate() {
 
 export async function GET(request: Request) {
   const force = new URL(request.url).searchParams.get("force") === "true";
+  // Admin-only — see app/api/generate-story/route.ts.
+  if (force && !(await isAdminRequest(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const today = new Date().toISOString().split("T")[0];
   const { env, ctx } = getCloudflareContext();
 
@@ -40,7 +45,6 @@ export async function GET(request: Request) {
     );
   } catch (error) {
     console.error("[prepositions route] fatal error:", error);
-    const message = error instanceof Error ? error.message : "Failed to generate prepositions";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "Failed to generate prepositions" }, { status: 500 });
   }
 }

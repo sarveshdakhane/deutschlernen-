@@ -4,3 +4,6 @@ PIXABAY_API_KEY=your_pixabay_api_key_here
 NOTION_API_KEY=your_notion_internal_integration_token_here
 NOTION_DATA_SOURCE_ID=your_notion_data_source_id_here
 NOTION_VOCAB_PAGE_ID=your_notion_vocab_page_id_here
+# Required for ?force=true regeneration (sent as "Authorization: Bearer <token>").
+# At least 32 chars; generate with: openssl rand -hex 32. Unset = force disabled.
+ADMIN_TOKEN=your_random_admin_token_here

@@ -35,6 +35,14 @@
 		{ "pattern": "www.dailydeutsch.org", "custom_domain": true }
 	],
 
+	// Per-IP rate limits enforced in workers/entry.ts before Next.js runs.
+	// Static assets are served before the worker and don't count. namespace_id
+	// just needs to be a unique integer string within the Cloudflare account.
+	"ratelimits": [
+		{ "name": "PAGE_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } },
+		{ "name": "API_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
+	],
+
 	"durable_objects": {
 		"bindings": [
 			{

@@ -27,8 +27,36 @@ function getTomorrowDate(): string {
   return d.toISOString().split("T")[0];
 }
 
+// Paths this app never serves that vulnerability scanners probe for (seen in
+// Cloudflare analytics as /login, /signin, …). Rejected here so they never
+// reach Next.js.
+const SCANNER_PATH =
+  /^\/(login|signin|admin|administrator|wp-|wordpress|phpmyadmin|pma|xmlrpc|cgi-bin|vendor|\.env|\.git|\.aws|\.ssh|\.vscode|config\.|backup|server-status)|\.(php|asp|aspx|jsp|cgi|env|ini|sql|bak)$/i;
+
+// Known attack-tool user agents. "Mozlila" is a deliberately misspelled UA
+// used by a widespread scanner (also seen in analytics).
+const BAD_USER_AGENT = /mozlila|sqlmap|nikto|nuclei|zgrab|masscan|wpscan|nmap|dirbuster|gobuster|ffuf/i;
+
+async function guardedFetch(request: Request, env: CloudflareEnv, ctx: ExecutionContext): Promise<Response> {
+  const { pathname } = new URL(request.url);
+  const userAgent = request.headers.get("user-agent") ?? "";
+
+  if (SCANNER_PATH.test(pathname) || BAD_USER_AGENT.test(userAgent)) {
+    return new Response("Not found", { status: 404 });
+  }
+
+  const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+  const limiter = pathname.startsWith("/api/") ? env.API_RATE_LIMITER : env.PAGE_RATE_LIMITER;
+  const { success } = await limiter.limit({ key: ip });
+  if (!success) {
+    return new Response("Too many requests", { status: 429, headers: { "Retry-After": "60" } });
+  }
+
+  return handler.fetch(request, env, ctx);
+}
+
 export default {
-  fetch: handler.fetch,
+  fetch: guardedFetch,
 
   // Proactively generates tomorrow's content on a schedule, so it's ready
   // before the day rolls over regardless of traffic — replaces the old

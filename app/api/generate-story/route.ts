@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { requestGeneration } from "@/lib/generationCoordinatorClient.server";
+import { isAdminRequest } from "@/lib/adminAuth.server";
 import { Story } from "@/lib/types";
 
 // See app/api/readings/[date]/route.ts — same reasoning, kept in sync since
@@ -15,6 +16,11 @@ function getTomorrowDate() {
 
 export async function GET(request: Request) {
   const force = new URL(request.url).searchParams.get("force") === "true";
+  // Forced regeneration bypasses the R2 cache and re-runs the whole Claude
+  // pipeline, so it's admin-only — otherwise anyone could burn API tokens.
+  if (force && !(await isAdminRequest(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const today = new Date().toISOString().split("T")[0];
   const { env, ctx } = getCloudflareContext();
 
@@ -44,7 +50,7 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error("[route] fatal error:", error);
-    const message = error instanceof Error ? error.message : "Failed to generate readings";
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Generic message only — internal errors can include upstream API details.
+    return NextResponse.json({ error: "Failed to generate readings" }, { status: 500 });
   }
 }

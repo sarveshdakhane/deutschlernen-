@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx eslint *)",
+      "Bash(npx vitest *)",
+      "Bash(npx opennextjs-cloudflare *)",
+      "Bash(echo \"build exit $?\")"
+    ]
+  }
+}

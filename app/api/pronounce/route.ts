@@ -48,6 +48,14 @@ export async function GET(request: Request) {
       headers: { "Content-Type": "application/json" },
     });
   }
+  // Each new word triggers up to 20 Tatoeba requests and an R2 write, so
+  // reject anything that can't be a real German word or short phrase.
+  if (word.length > 60 || !/^[\p{L}\p{M}' -]+$/u.test(word)) {
+    return new Response(JSON.stringify({ error: "Invalid word" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   const encoder = new TextEncoder();
   const { env } = getCloudflareContext();
